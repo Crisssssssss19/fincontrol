@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -45,6 +45,7 @@ export default function AuthPage() {
   const [sandboxEmail, setSandboxEmail] = useState('');
   const [sandboxName, setSandboxName] = useState('');
   const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
+  const isGoogleInitialized = useRef(false);
 
   const router = useRouter();
   const setSession = useAuthStore(state => state.setSession);
@@ -85,28 +86,31 @@ export default function AuthPage() {
         return;
       }
 
-      google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response: any) => {
-          try {
-            setIsSigningInGoogle(true);
-            const res = await fetch('/api/auth/google', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ credential: response.credential }),
-            });
-            const result = await res.json();
-            if (!result.success) throw new Error(result.error);
-            
-            setSession(result.user, result.token);
-            router.push('/dashboard');
-          } catch (err: any) {
-            alert(language === 'es' ? 'Error al iniciar con Google: ' + err.message : 'Google sign-in failed: ' + err.message);
-          } finally {
-            setIsSigningInGoogle(false);
+      if (!isGoogleInitialized.current) {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: any) => {
+            try {
+              setIsSigningInGoogle(true);
+              const res = await fetch('/api/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: response.credential }),
+              });
+              const result = await res.json();
+              if (!result.success) throw new Error(result.error);
+              
+              setSession(result.user, result.token);
+              router.push('/dashboard');
+            } catch (err: any) {
+              alert(language === 'es' ? 'Error al iniciar con Google: ' + err.message : 'Google sign-in failed: ' + err.message);
+            } finally {
+              setIsSigningInGoogle(false);
+            }
           }
-        }
-      });
+        });
+        isGoogleInitialized.current = true;
+      }
 
       google.accounts.id.prompt();
     } catch (err) {
