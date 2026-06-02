@@ -8,6 +8,15 @@ import { GetUserIncomes } from '@/core/usecases/incomes/GetUserIncomes';
 import { GetUserExpenses } from '@/core/usecases/expenses/GetUserExpenses';
 import { GetUserProfile } from '@/core/usecases/users/GetUserProfile';
 
+interface CacheEntry {
+  tips: any[];
+  timestamp: number;
+}
+
+// In-memory cache for advisor tips per user to prevent OpenRouter 429 spam
+const advisorCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
+
 export async function GET(req: Request) {
   try {
     const user = await getCurrentUser(req);
@@ -17,6 +26,16 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const language = searchParams.get('lang') || 'es';
+    const forceRefresh = searchParams.get('refresh') === 'true';
+    const userId = user.userId;
+
+    // Check if we have a valid cache entry
+    const cachedEntry = advisorCache.get(userId);
+    const now = Date.now();
+    if (!forceRefresh && cachedEntry && (now - cachedEntry.timestamp < CACHE_TTL)) {
+      console.log(`[AI Advisor] Returning CACHED tips for user ${userId} (Age: ${Math.round((now - cachedEntry.timestamp) / 1000)}s)`);
+      return NextResponse.json({ success: true, tips: cachedEntry.tips, cached: true });
+    }
 
     // 1. Fetch user financial records and profile using existing clean repositories & usecases
     const userUsecase = new GetUserProfile(userRepository);
@@ -158,45 +177,84 @@ ${recentTransactionsSummary || 'Ninguna transacción reciente.'}
 
 Genera los 3 consejos financieros personalizados en formato JSON ahora.`;
 
-    // 5. Call OpenRouter API
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://fincontrol.app",
-          "X-Title": "FinControl Smart Advisor"
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3.1-flash-lite",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          response_format: { type: "json_object" }
-        })
-      });
+    // 5. Call OpenRouter API with resilient free-tier failover
+    const modelsToTry = [
+      "google/gemini-2-flash:free",
+      "deepseek/deepseek-chat:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
+      "openrouter/free"
+    ];
 
-      if (!response.ok) {
-        throw new Error(`OpenRouter API responded with status ${response.status}`);
+    let lastError = null;
+    let parsedTips = null;
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[AI Advisor] Attempting analysis using model: ${model}`);
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://fincontrol.app",
+            "X-Title": "FinControl Smart Advisor"
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`OpenRouter responded with status ${response.status} for model ${model}`);
+        }
+
+        const responseData = await response.json();
+        
+        // Check for specific API error payloads (like billing limits or account exhaustion)
+        if (responseData.error) {
+          throw new Error(`API error from OpenRouter: ${responseData.error.message || JSON.stringify(responseData.error)}`);
+        }
+
+        const content = responseData.choices?.[0]?.message?.content;
+        if (!content) {
+          throw new Error(`Empty message content returned by model ${model}`);
+        }
+
+        // Parse and validate LLM JSON response
+        const parsed = JSON.parse(content);
+        if (parsed && Array.isArray(parsed.tips) && parsed.tips.length > 0) {
+          parsedTips = parsed.tips;
+          console.log(`[AI Advisor] Successfully generated advice using model ${model}`);
+          
+          // Store in server-side cache
+          advisorCache.set(userId, { tips: parsedTips, timestamp: Date.now() });
+          break; // Success! Break out of loop.
+        } else {
+          throw new Error(`Invalid tips JSON structure returned by model ${model}`);
+        }
+      } catch (err: any) {
+        console.warn(`[AI Advisor] Model ${model} failed:`, err.message);
+        lastError = err;
+        // Continue to try the next model...
+      }
+    }
+
+    if (parsedTips) {
+      return NextResponse.json({ success: true, tips: parsedTips });
+    } else {
+      // If AI failed but we have an EXPIRED cache entry, we return it as a resilient fallback!
+      if (cachedEntry) {
+        console.warn(`[AI Advisor] AI failed, returning EXPIRED cache entry as resilient fallback for user ${userId}`);
+        return NextResponse.json({ success: true, tips: cachedEntry.tips, cached: true, expired: true });
       }
 
-      const responseData = await response.json();
-      const content = responseData.choices?.[0]?.message?.content;
-      if (!content) {
-        throw new Error("Empty response from OpenRouter");
-      }
-
-      // Parse and validate LLM JSON response
-      const parsed = JSON.parse(content);
-      if (parsed && Array.isArray(parsed.tips) && parsed.tips.length > 0) {
-        return NextResponse.json({ success: true, tips: parsed.tips });
-      } else {
-        throw new Error("Invalid structure returned by AI");
-      }
-    } catch (apiErr) {
-      console.error("OpenRouter API error, falling back to local heuristic rules:", apiErr);
+      console.error("[AI Advisor] All resilient AI models failed. Falling back to local heuristic rules.", lastError);
       return NextResponse.json({ success: true, ...getFallbackAdvice(language) });
     }
 

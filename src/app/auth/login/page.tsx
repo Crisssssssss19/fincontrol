@@ -53,22 +53,81 @@ export default function AuthPage() {
 
   const t = translations[language] || translations['es'];
 
-  // Google Identity Services script loader
+  // Load and initialize Google Identity Services & render native button
   useEffect(() => {
-    console.log("DEBUG: NEXT_PUBLIC_GOOGLE_CLIENT_ID =", process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     
-    return () => {
-      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-      if (existingScript && existingScript.parentNode) {
-        existingScript.parentNode.removeChild(existingScript);
+    if (!clientId || clientId === 'tu_google_client_id_aqui' || clientId === '') {
+      return;
+    }
+
+    const initGoogle = () => {
+      try {
+        const google = (window as any).google;
+        if (!google || !google.accounts) return;
+
+        // Initialize Google Identity Services
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: any) => {
+            try {
+              setIsSigningInGoogle(true);
+              const res = await fetch('/api/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: response.credential }),
+              });
+              const result = await res.json();
+              if (!result.success) throw new Error(result.error);
+              
+              setSession(result.user, result.token);
+              router.push('/dashboard');
+            } catch (err: any) {
+              alert(language === 'es' ? 'Error al iniciar con Google: ' + err.message : 'Google sign-in failed: ' + err.message);
+            } finally {
+              setIsSigningInGoogle(false);
+            }
+          },
+          auto_select: false, // Evita la selección automática molesta
+        });
+
+        isGoogleInitialized.current = true;
+
+        // Render standard centered popup Google button
+        const buttonParent = document.getElementById('google-btn-container');
+        if (buttonParent) {
+          const containerWidth = buttonParent.clientWidth || 376;
+          const finalWidth = Math.max(200, Math.min(400, containerWidth));
+          google.accounts.id.renderButton(buttonParent, {
+            theme: 'outline',
+            size: 'large',
+            width: finalWidth,
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+            locale: language // Adapta el idioma del botón oficial al de la aplicación
+          });
+        }
+      } catch (err) {
+        console.warn('Google SDK initialization failed:', err);
       }
     };
-  }, []);
+
+    // Si el script de Google ya está en el DOM, inicializamos directamente
+    if ((window as any).google && (window as any).google.accounts) {
+      initGoogle();
+    } else {
+      let script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]') as HTMLScriptElement;
+      if (!script) {
+        script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+      }
+      script.addEventListener('load', initGoogle);
+    }
+  }, [language]);
 
   const handleGoogleSignIn = () => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -86,6 +145,7 @@ export default function AuthPage() {
         return;
       }
 
+      // Respaldo por si cargó pero el botón nativo no se renderizó: inicializar y lanzar One Tap
       if (!isGoogleInitialized.current) {
         google.accounts.id.initialize({
           client_id: clientId,
@@ -601,32 +661,34 @@ export default function AuthPage() {
                     <span className="flex-shrink mx-4 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t.orContinueWith}</span>
                     <div className="flex-grow border-t border-border/40"></div>
                   </div>
-                  <div className="mt-2">
-                    <button 
-                      type="button"
-                      onClick={handleGoogleSignIn}
-                      className="w-full flex items-center justify-center gap-3 py-3 border border-border rounded-xl hover:bg-muted transition-all font-bold text-xs text-[var(--foreground)] active:scale-98 cursor-pointer shadow-3xs hover:shadow-2xs"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.04c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.6 15 1 12 1 7.3 1 3.4 3.7 1.6 7.7l3.9 3C6.4 7.6 9 5.04 12 5.04z"
-                        />
-                        <path
-                          fill="#4285F4"
-                          d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.5 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.6 7.2C.6 9.2 0 11.5 0 14s.6 4.8 1.6 6.8l3.9-3z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.6-2.6-6.5-5.7l-3.9 3c1.8 4 5.7 6.7 10.4 6.7z"
-                        />
-                      </svg>
-                      {language === 'es' ? 'Continuar con Google' : 'Continue with Google'}
-                    </button>
+                  <div className="mt-2 flex justify-center w-full min-h-[44px]">
+                    <div id="google-btn-container" className="w-full flex justify-center">
+                      <button 
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        className="w-full flex items-center justify-center gap-3 py-3 border border-border rounded-xl hover:bg-muted transition-all font-bold text-xs text-[var(--foreground)] active:scale-98 cursor-pointer shadow-3xs hover:shadow-2xs"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.04c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.6 15 1 12 1 7.3 1 3.4 3.7 1.6 7.7l3.9 3C6.4 7.6 9 5.04 12 5.04z"
+                          />
+                          <path
+                            fill="#4285F4"
+                            d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.5 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.6 7.2C.6 9.2 0 11.5 0 14s.6 4.8 1.6 6.8l3.9-3z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.6-2.6-6.5-5.7l-3.9 3c1.8 4 5.7 6.7 10.4 6.7z"
+                          />
+                        </svg>
+                        {language === 'es' ? 'Continuar con Google' : 'Continue with Google'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>
