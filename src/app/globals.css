@@ -1,0 +1,397 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-container: var(--primary-container);
+  --color-primary-container-foreground: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.5);
+  --radius-xl: calc(var(--radius) * 2);
+}
+
+:root {
+  /* Default: Emerald Slate theme colors */
+  --background: #f7f9fb;
+  --foreground: #191c1e;
+  --card: #ffffff;
+  --card-foreground: #191c1e;
+  --popover: #ffffff;
+  --popover-foreground: #191c1e;
+  --primary: #006c49;
+  --primary-foreground: #ffffff;
+  --primary-container: #10b981;
+  --on-primary-container: #00422b;
+  --secondary: #565e74;
+  --secondary-foreground: #ffffff;
+  --muted: #f2f4f6;
+  --muted-foreground: #5c647a;
+  --accent: #eceef0;
+  --accent-foreground: #191c1e;
+  --error: #ba1a1a;
+  --error-foreground: #ffffff;
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #1e293b;
+  --border: #e0e3e5;
+  --input: #e0e3e5;
+  --ring: #006c49;
+
+  /* Customizer Variables */
+  --radius: 0.5rem;
+  --radius-sm: 0.25rem;
+  --padding-card: 24px;
+  --padding-button: 12px 18px;
+  --gap-layout: 16px;
+  --transition-duration: 300ms;
+}
+
+/* 1. Theme overrides */
+
+.theme-light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+}
+
+.theme-modern_white {
+  --background: #f4f4f5; /* Zinc-100 background to avoid blending with cards */
+  --foreground: #09090b; /* Zinc-950 text */
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --border: #d4d4d8; /* Zinc-300 border for sharp input/card visibility */
+  --primary: #09090b;
+  --primary-foreground: #ffffff;
+  --muted: #e4e4e7;
+  --muted-foreground: #71717a;
+  --accent: #e4e4e7;
+  --accent-foreground: #09090b;
+  --ring: #09090b;
+}
+
+.theme-dark_pro {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --border: #27272a;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+}
+
+.theme-midnight {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --border: #1e293b;
+  --primary: #38bdf8;
+  --primary-foreground: #020617;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
+  --ring: #38bdf8;
+}
+
+.theme-dracula {
+  --background: #282a36;
+  --foreground: #f8f8f2;
+  --card: #343746;
+  --card-foreground: #f8f8f2;
+  --border: #44475a;
+  --primary: #ff79c6;
+  --primary-foreground: #282a36;
+  --muted: #44475a;
+  --muted-foreground: #6272a4;
+  --accent: #44475a;
+  --accent-foreground: #f8f8f2;
+  --ring: #ff79c6;
+}
+
+.theme-cyberpunk {
+  --background: #0d0012;
+  --foreground: #00ffff;
+  --card: #1a0024;
+  --card-foreground: #00ffff;
+  --border: #ff007f;
+  --primary: #ffff00;
+  --primary-foreground: #0d0012;
+  --muted: #3a0050;
+  --muted-foreground: #ff007f;
+  --accent: #ff007f;
+  --accent-foreground: #ffff00;
+  --ring: #ffff00;
+}
+
+.theme-amoled {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0c0c0c;
+  --card-foreground: #ffffff;
+  --border: #1f1f1f;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --muted: #1f1f1f;
+  --muted-foreground: #888888;
+  --accent: #1f1f1f;
+  --accent-foreground: #ffffff;
+  --ring: #ffffff;
+}
+
+.theme-emerald_slate {
+  --background: #f0f4f1; /* Soft green-tinted background */
+  --foreground: #0f1714; /* Slate-950 text */
+  --card: #ffffff;
+  --card-foreground: #0f1714;
+  --border: #cbd5e1; /* Slate-300 borders */
+  --primary: #006c49;
+  --primary-foreground: #ffffff;
+  --primary-container: #d1fae5;
+  --on-primary-container: #064e3b;
+  --muted: #e2e8f0;
+  --muted-foreground: #475569;
+  --accent: #e2e8f0;
+  --accent-foreground: #006c49;
+  --ring: #006c49;
+}
+
+.theme-rose_finance {
+  --background: #fdf2f8; /* Light pink background */
+  --foreground: #4c0519; /* Dark rose text */
+  --card: #ffffff;
+  --card-foreground: #4c0519;
+  --border: #fbcfe8; /* Soft pink border */
+  --primary: #db2777; /* Deep rose primary */
+  --primary-foreground: #ffffff;
+  --primary-container: #f472b6;
+  --on-primary-container: #4c0519;
+  --muted: #fce7f3;
+  --muted-foreground: #9d174d;
+  --accent: #fce7f3;
+  --accent-foreground: #db2777;
+  --ring: #db2777;
+}
+
+/* Dark mode fallback for Rose Finance */
+.dark .theme-rose_finance,
+[data-theme="dark"] .theme-rose_finance {
+  --background: #0f050b;
+  --foreground: #fce7f3;
+  --card: #1c0b15;
+  --card-foreground: #fce7f3;
+  --border: #4c0519;
+  --primary: #ec4899;
+  --primary-foreground: #ffffff;
+  --primary-container: #9d174d;
+  --on-primary-container: #fce7f3;
+  --muted: #2d1021;
+  --muted-foreground: #f472b6;
+  --accent: #2d1021;
+  --accent-foreground: #ec4899;
+  --ring: #ec4899;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light):not(.theme-modern_white):not(.theme-emerald_slate) .theme-rose_finance {
+    --background: #0f050b;
+    --foreground: #fce7f3;
+    --card: #1c0b15;
+    --card-foreground: #fce7f3;
+    --border: #4c0519;
+    --primary: #ec4899;
+    --primary-foreground: #ffffff;
+    --primary-container: #9d174d;
+    --on-primary-container: #fce7f3;
+    --muted: #2d1021;
+    --muted-foreground: #f472b6;
+    --accent: #2d1021;
+    --accent-foreground: #ec4899;
+    --ring: #ec4899;
+  }
+}
+
+
+/* 2. Accent overrides */
+.accent-emerald {
+  --primary: #10b981;
+  --primary-foreground: #ffffff;
+  --ring: #10b981;
+}
+.accent-indigo {
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --ring: #6366f1;
+}
+.accent-blue {
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --ring: #3b82f6;
+}
+.accent-purple {
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --ring: #8b5cf6;
+}
+.accent-orange {
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+  --ring: #f97316;
+}
+.accent-red {
+  --primary: #ef4444;
+  --primary-foreground: #ffffff;
+  --ring: #ef4444;
+}
+.accent-rose {
+  --primary: #f43f5e;
+  --primary-foreground: #ffffff;
+  --ring: #f43f5e;
+}
+
+/* 3. Border radius classes */
+.radius-square {
+  --radius: 0rem !important;
+  --radius-sm: 0rem !important;
+}
+.radius-rounded {
+  --radius: 0.5rem !important;
+  --radius-sm: 0.25rem !important;
+}
+.radius-ultra_rounded {
+  --radius: 1.25rem !important;
+  --radius-sm: 0.5rem !important;
+}
+
+/* 4. Layout densities */
+.density-compact {
+  --padding-card: 12px;
+  --padding-button: 8px 12px;
+  --gap-layout: 8px;
+}
+.density-normal {
+  --padding-card: 24px;
+  --padding-button: 12px 18px;
+  --gap-layout: 16px;
+}
+.density-comfortable {
+  --padding-card: 32px;
+  --padding-button: 16px 24px;
+  --gap-layout: 24px;
+}
+
+/* 5. Animation speeds */
+.speed-fast {
+  --transition-duration: 150ms;
+}
+.speed-normal {
+  --transition-duration: 300ms;
+}
+.speed-slow {
+  --transition-duration: 600ms;
+}
+
+/* 6. Base Styles */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color var(--transition-duration) cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color var(--transition-duration) cubic-bezier(0.4, 0, 0.2, 1),
+              color var(--transition-duration) cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary);
+}
+
+.custom-card {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--padding-card);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05);
+  transition: all var(--transition-duration) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -1px rgba(15, 23, 42, 0.06);
+}
+
+/* 7. Premium Custom Dropdowns and Selects */
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-position: right 1rem center !important;
+  background-repeat: no-repeat !important;
+  background-size: 1.25rem !important;
+  padding-right: 2.5rem !important;
+  min-height: 46px;
+  cursor: pointer;
+  transition: all var(--transition-duration) ease;
+}
+
+select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
+}
+
+option {
+  padding: 12px !important;
+  font-size: 14px;
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
+/* Ensure no horizontal overflows on PWA */
+html, body {
+  max-w: 100vw;
+  overflow-x: hidden;
+}
