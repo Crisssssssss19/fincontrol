@@ -29,6 +29,7 @@ export class JoseTokenService implements ITokenService {
         userId: payload.userId as string,
         email: payload.email as string,
         role: payload.role as string,
+        tokenVersion: payload.tokenVersion as number | undefined,
       };
     } catch {
       return null;
@@ -42,6 +43,7 @@ export class JoseTokenService implements ITokenService {
         userId: payload.userId as string,
         email: payload.email as string,
         role: payload.role as string,
+        tokenVersion: payload.tokenVersion as number | undefined,
       };
     } catch {
       return null;

@@ -65,16 +65,20 @@ export async function POST(req: Request) {
       failedVerificationAttempts: 0,
     });
 
+    const currentVersion = updatedUser.visualSettings?.tokenVersion || 1;
+
     const accessToken = await tokenService.generateAccessToken({
       userId: updatedUser.id,
       email: updatedUser.email,
       role: updatedUser.role,
+      tokenVersion: currentVersion,
     });
 
     const refreshToken = await tokenService.generateRefreshToken({
       userId: updatedUser.id,
       email: updatedUser.email,
       role: updatedUser.role,
+      tokenVersion: currentVersion,
     });
 
     await SecurityAuditService.logAction(updatedUser.id, 'verification_success_login', req);

@@ -54,16 +54,20 @@ export async function POST(req: Request) {
     }
 
     // 3. Normal Login (No 2FA, Email Verified)
+    const currentVersion = user.visualSettings?.tokenVersion || 1;
+
     const accessToken = await tokenService.generateAccessToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: currentVersion,
     });
 
     const refreshToken = await tokenService.generateRefreshToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: currentVersion,
     });
 
     await SecurityAuditService.logAction(user.id, 'login_success', req);

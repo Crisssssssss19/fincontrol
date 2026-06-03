@@ -32,6 +32,59 @@ export default function SettingsPage() {
   const [toggling2FA, setToggling2FA] = useState(false);
   const [twoFactorSuccess, setTwoFactorSuccess] = useState('');
 
+  // Active Sessions states
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [terminatingSessions, setTerminatingSessions] = useState(false);
+
+  const fetchSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const res = await fetch('/api/profile/security');
+      const data = await res.json();
+      if (data.success && data.sessions) {
+        setSessions(data.sessions);
+      }
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'security') {
+      fetchSessions();
+    }
+  }, [activeTab]);
+
+  const handleTerminateSessions = async () => {
+    const confirmMsg = language === 'es'
+      ? '¿Estás seguro de que deseas cerrar todas las demás sesiones activas?'
+      : 'Are you sure you want to close all other active sessions?';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setTerminatingSessions(true);
+      const res = await fetch('/api/profile/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'terminate-sessions' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(language === 'es' ? 'Todas las demás sesiones se han cerrado.' : 'All other sessions have been terminated.');
+        fetchSessions();
+      } else {
+        alert(data.error || (language === 'es' ? 'Error al cerrar sesiones.' : 'Error closing sessions.'));
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setTerminatingSessions(false);
+    }
+  };
+
 
 
   const { user, updateUser } = useAuthStore();
@@ -550,11 +603,71 @@ export default function SettingsPage() {
                     : 'You can remotely log out of all other active sessions across browsers and mobile apps to secure your account.'
                   }
                 </p>
-                <div className="pt-2 border-t border-border/40">
-                  <p className="text-[10px] text-muted-foreground font-bold mb-3">{t.dispositivosActivos}</p>
-                  <button className="text-error font-extrabold text-xs hover:underline decoration-2 underline-offset-4 active:scale-95 transition-transform cursor-pointer">
-                    {t.cerrarTodasSesiones}
-                  </button>
+                
+                <div className="pt-4 border-t border-border/40 space-y-3">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                    {language === 'es' ? 'Dispositivos Activos Recientes' : 'Recent Active Devices'}
+                  </p>
+                  
+                  {loadingSessions ? (
+                    <div className="space-y-2">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="animate-pulse flex items-center justify-between p-2.5 bg-muted/20 border border-border/40 rounded-xl">
+                          <div className="space-y-1 w-2/3">
+                            <div className="h-3 bg-muted-foreground/20 rounded w-full"></div>
+                            <div className="h-2.5 bg-muted-foreground/10 rounded w-1/2"></div>
+                          </div>
+                          <div className="h-3 bg-muted-foreground/20 rounded w-10"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      {language === 'es' ? 'No se encontraron sesiones registradas.' : 'No active sessions found.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                      {sessions.map((sess) => (
+                        <div 
+                          key={sess.id} 
+                          className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                            sess.isCurrent 
+                              ? 'bg-[var(--primary)]/5 border-[var(--primary)]/30' 
+                              : 'bg-muted/10 border-border/50'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-[var(--foreground)] truncate max-w-[150px]">
+                                {sess.device}
+                              </span>
+                              {sess.isCurrent && (
+                                <span className="bg-[var(--primary)]/10 text-[var(--primary)] text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0">
+                                  {language === 'es' ? 'Actual' : 'Current'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+                              IP: {sess.ipAddress} • {new Date(sess.lastActive).toLocaleDateString()} {new Date(sess.lastActive).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button 
+                      onClick={handleTerminateSessions}
+                      disabled={terminatingSessions || loadingSessions || sessions.length <= 1}
+                      className="text-error font-extrabold text-xs hover:underline decoration-2 underline-offset-4 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                    >
+                      {terminatingSessions 
+                        ? (language === 'es' ? 'Cerrando sesiones...' : 'Terminating sessions...') 
+                        : (language === 'es' ? 'Cerrar todas las otras sesiones' : 'Close all other sessions')
+                      }
+                    </button>
+                  </div>
                 </div>
               </section>
             </div>

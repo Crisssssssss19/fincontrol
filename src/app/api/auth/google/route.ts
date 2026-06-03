@@ -117,16 +117,20 @@ export async function POST(req: Request) {
     }
 
     // 4. Generate local JWT Access and Refresh Tokens
+    const currentVersion = user.visualSettings?.tokenVersion || 1;
+
     const accessToken = await tokenService.generateAccessToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: currentVersion,
     });
 
     const refreshToken = await tokenService.generateRefreshToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: currentVersion,
     });
 
     // 5. Build Response and set cookies

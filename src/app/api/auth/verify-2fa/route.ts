@@ -60,16 +60,20 @@ export async function POST(req: Request) {
       failedTwoFactorAttempts: 0,
     });
 
+    const currentVersion = updatedUser.visualSettings?.tokenVersion || 1;
+
     const accessToken = await tokenService.generateAccessToken({
       userId: updatedUser.id,
       email: updatedUser.email,
       role: updatedUser.role,
+      tokenVersion: currentVersion,
     });
 
     const refreshToken = await tokenService.generateRefreshToken({
       userId: updatedUser.id,
       email: updatedUser.email,
       role: updatedUser.role,
+      tokenVersion: currentVersion,
     });
 
     await SecurityAuditService.logAction(updatedUser.id, '2fa_login_success', req);
