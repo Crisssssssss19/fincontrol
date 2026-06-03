@@ -21,6 +21,9 @@ const registerSchema = z.object({
   email: z.string().email('Introduce un correo electrónico válido / Enter a valid email'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres / Password must be at least 6 characters'),
   confirmPassword: z.string().min(6, 'Confirma tu contraseña / Confirm password'),
+  acceptTerms: z.boolean().refine(val => val === true, {
+    message: 'Debes aceptar los términos y condiciones / You must accept the terms and conditions'
+  }),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Las contraseñas no coinciden / Passwords do not match',
   path: ['confirmPassword']
@@ -643,6 +646,35 @@ export default function AuthPage() {
                       />
                       {signupErrors.confirmPassword && <p className="text-xs text-error font-medium">{signupErrors.confirmPassword.message}</p>}
                     </div>
+
+                    <div className="flex items-start gap-2 pt-1 pb-1">
+                      <input 
+                        id="acceptTerms"
+                        type="checkbox"
+                        {...registerSignup('acceptTerms')}
+                        className="mt-0.5 w-4 h-4 rounded-md border-border text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                      <label htmlFor="acceptTerms" className="text-xs font-semibold text-muted-foreground leading-snug cursor-pointer select-none">
+                        {language === 'es' ? (
+                          <>
+                            Acepto los{' '}
+                            <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                              Términos y Condiciones
+                            </Link>{' '}
+                            de la aplicación.
+                          </>
+                        ) : (
+                          <>
+                            I accept the{' '}
+                            <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                              Terms and Conditions
+                            </Link>{' '}
+                            of the application.
+                          </>
+                        )}
+                      </label>
+                    </div>
+                    {signupErrors.acceptTerms && <p className="text-xs text-error font-medium">{signupErrors.acceptTerms.message}</p>}
 
                     <button 
                       type="submit"
