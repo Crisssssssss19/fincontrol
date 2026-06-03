@@ -32,8 +32,7 @@ export default function SettingsPage() {
   const [toggling2FA, setToggling2FA] = useState(false);
   const [twoFactorSuccess, setTwoFactorSuccess] = useState('');
 
-  const [expenseAlerts, setExpenseAlerts] = useState(true);
-  const [weeklySummary, setWeeklySummary] = useState(true);
+
 
   const { user, updateUser } = useAuthStore();
   const { language } = useLanguageStore();
@@ -47,7 +46,9 @@ export default function SettingsPage() {
     borderRadius, setBorderRadius,
     density, setDensity,
     animations, setAnimations,
-    animationSpeed, setAnimationSpeed
+    animationSpeed, setAnimationSpeed,
+    expenseAlerts, setExpenseAlerts,
+    weeklySummary, setWeeklySummary
   } = useThemeStore();
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -391,19 +392,6 @@ export default function SettingsPage() {
                 </div>
               </section>
 
-              {/* Premium Plan Card Banner */}
-              <section className="bg-[var(--primary)] p-6 rounded-2xl shadow-lg relative overflow-hidden group">
-                <div className="absolute -right-8 -bottom-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
-                  <Sparkles className="w-32 h-32 text-white" />
-                </div>
-                <h3 className="text-xl font-black text-white mb-1">{t.planPremium}</h3>
-                <p className="text-xs text-white/80 leading-relaxed mb-6">
-                  {t.premiumDesc}
-                </p>
-                <button className="w-full bg-white text-[var(--primary)] font-bold text-xs py-3 rounded-xl hover:bg-muted transition-colors active:scale-[0.98] shadow-sm">
-                  {t.verDetalles}
-                </button>
-              </section>
             </div>
             
           </div>

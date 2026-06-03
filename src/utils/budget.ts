@@ -114,27 +114,36 @@ export async function checkBudgetThresholds(userId: string): Promise<{ crossedTh
     ];
   }
   
-  // 1. Create DB notification
-  await notificationRepository.create({
-    userId,
-    title,
-    message,
-    type,
-    read: false,
-  });
+  // Check if user has disabled notifications in settings
+  const isExpenseAlertsEnabled = user.visualSettings?.expenseAlerts !== false;
   
-  // 2. Dispatch Email
-  const emailHtml = EmailTemplates.getBudgetTemplate(
-    user.fullName,
-    thresholdToAlert,
-    budget,
-    spent,
-    percent,
-    user.currency || 'EUR',
-    recommendations
-  );
-  
-  await ResendEmailService.sendMail(user.email, title, emailHtml);
+  if (isExpenseAlertsEnabled) {
+    // 1. Create DB notification
+    await notificationRepository.create({
+      userId,
+      title,
+      message,
+      type,
+      read: false,
+    });
+    
+    // 2. Dispatch Email
+    const emailHtml = EmailTemplates.getBudgetTemplate(
+      user.fullName,
+      thresholdToAlert,
+      budget,
+      spent,
+      percent,
+      user.currency || 'EUR',
+      recommendations
+    );
+    
+    try {
+      await ResendEmailService.sendMail(user.email, title, emailHtml);
+    } catch (emailErr) {
+      console.error('Failed to send budget threshold email:', emailErr);
+    }
+  }
   
   return { crossedThreshold: thresholdToAlert, percent };
 }

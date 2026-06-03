@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { translations } from '@/lib/translations';
@@ -695,7 +696,23 @@ export default function AuthPage() {
             )}
 
             <p className="text-center text-[10px] text-muted-foreground leading-relaxed pt-2">
-              {t.termsAndPrivacy}
+              {language === 'es' ? (
+                <>
+                  Al continuar, aceptas nuestros{' '}
+                  <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                    Términos de Servicio
+                  </Link>{' '}
+                  y Política de Privacidad.
+                </>
+              ) : (
+                <>
+                  By continuing, you agree to our{' '}
+                  <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                    Terms of Service
+                  </Link>{' '}
+                  and Privacy Policy.
+                </>
+              )}
             </p>
           </div>
         </div>

@@ -26,6 +26,8 @@ interface VisualSettings {
   animations: boolean;
   animationSpeed: AnimationSpeed;
   dashboardLayout: WidgetLayout[];
+  expenseAlerts: boolean;
+  weeklySummary: boolean;
   setTheme: (t: FinanceTheme) => void;
   setAccentColor: (a: AccentColor) => void;
   setFont: (f: PrimaryFont) => void;
@@ -34,6 +36,8 @@ interface VisualSettings {
   setAnimations: (enabled: boolean) => void;
   setAnimationSpeed: (s: AnimationSpeed) => void;
   setDashboardLayout: (layout: WidgetLayout[]) => void;
+  setExpenseAlerts: (enabled: boolean) => void;
+  setWeeklySummary: (enabled: boolean) => void;
 }
 
 const defaultLayout: WidgetLayout[] = [
@@ -74,6 +78,8 @@ async function syncSettings(state: any) {
           animations: state.animations,
           animationSpeed: state.animationSpeed,
           dashboardLayout: state.dashboardLayout,
+          expenseAlerts: state.expenseAlerts,
+          weeklySummary: state.weeklySummary,
         }),
       });
     } catch (err) {
@@ -93,6 +99,9 @@ export const useThemeStore = create<VisualSettings>()(
       animations: true,
       animationSpeed: 'normal',
       dashboardLayout: defaultLayout,
+      
+      expenseAlerts: true,
+      weeklySummary: true,
       
       setTheme: (theme) => set((state) => {
         const next = { ...state, theme };
@@ -133,6 +142,16 @@ export const useThemeStore = create<VisualSettings>()(
         const next = { ...state, dashboardLayout };
         syncSettings(next);
         return { dashboardLayout };
+      }),
+      setExpenseAlerts: (expenseAlerts) => set((state) => {
+        const next = { ...state, expenseAlerts };
+        syncSettings(next);
+        return { expenseAlerts };
+      }),
+      setWeeklySummary: (weeklySummary) => set((state) => {
+        const next = { ...state, weeklySummary };
+        syncSettings(next);
+        return { weeklySummary };
       }),
     }),
     {

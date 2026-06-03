@@ -44,6 +44,7 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname();
   const isAuthPage = pathname?.startsWith('/auth');
+  const isPublicPage = isAuthPage || pathname === '/terms';
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -70,10 +71,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   // Redirect to login if not authenticated on a protected page
   useEffect(() => {
-    if (isMounted && !isAuthPage && !user) {
+    if (isMounted && !isPublicPage && !user) {
       router.push('/auth/login');
     }
-  }, [isMounted, isAuthPage, user, router]);
+  }, [isMounted, isPublicPage, user, router]);
 
   const { isOnline, setOnlineStatus } = useSyncStore();
   const { language, setLanguage } = useLanguageStore();
@@ -245,7 +246,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   // If on login/register routes, don't wrap with layout navigation
 
-  if (isAuthPage) {
+  if (isAuthPage || (pathname === '/terms' && !user)) {
     return (
       <div className="min-h-screen bg-[var(--background)]">
         <ThemeInitializer />
@@ -254,8 +255,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
     );
   }
 
-  // Prevent flashing layout if guest and redirecting
-  if (isMounted && !user) {
+  // Prevent flashing layout if guest and redirecting (except public terms page)
+  if (isMounted && !user && pathname !== '/terms') {
     return null;
   }
 
@@ -396,7 +397,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 user?.fullName ? user.fullName[0] : 'U'
               )}
             </div>
-            <div className="flex flex-col min-w-0">
+            <div style={{ display: 'none' }} className="lg:!flex flex-col min-w-0">
               <span className="text-sm font-black text-[var(--foreground)] truncate leading-tight">
                 {user?.fullName || user?.email?.split('@')[0] || 'Usuario'}
               </span>

@@ -136,8 +136,15 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    fetchAdvisorTips(language);
-  }, [language]);
+    if (!loading) {
+      if (incomes.length > 0 || expenses.length > 0) {
+        fetchAdvisorTips(language);
+      } else {
+        setAdvisorTips([]);
+        setLoadingTips(false);
+      }
+    }
+  }, [loading, incomes.length, expenses.length, language]);
 
   // Summary calculations
   const totalIncomes = incomes.reduce((acc, curr) => acc + curr.amount, 0);
@@ -604,7 +611,7 @@ export default function DashboardPage() {
               
               <button
                 onClick={() => fetchAdvisorTips(language)}
-                disabled={loadingTips}
+                disabled={loadingTips || (incomes.length === 0 && expenses.length === 0)}
                 className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
                 title={language === 'es' ? 'Recargar Consejos' : 'Reload Advice'}
               >
@@ -614,7 +621,21 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {loadingTips ? (
+            {incomes.length === 0 && expenses.length === 0 ? (
+              <div className="py-8 px-4 text-center bg-muted/10 border border-dashed border-border/40 rounded-xl flex flex-col items-center justify-center animate-in fade-in duration-300">
+                <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center mb-3 border border-[var(--primary)]/20">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                </div>
+                <h4 className="text-xs font-black text-[var(--foreground)] uppercase tracking-wider mb-1">
+                  {language === 'es' ? 'Descubre tu Asesor de IA' : 'Discover your AI Coach'}
+                </h4>
+                <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[220px]">
+                  {language === 'es'
+                    ? 'Registra tus primeros movimientos en FinControl para recibir consejos inteligentes y personalizados de ahorro e inversión.'
+                    : 'Register your first movements in FinControl to receive smart, personalized saving and investment advice.'}
+                </p>
+              </div>
+            ) : loadingTips ? (
               <div className="space-y-3 py-1">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="animate-pulse flex flex-col gap-2 p-3 bg-muted/20 border border-border/50 rounded-xl">
