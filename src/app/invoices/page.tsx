@@ -59,6 +59,9 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDayInvoices, setSelectedDayInvoices] = useState<{ date: Date; invoices: any[] } | null>(null);
   const { user } = useAuthStore();
   const { searchQuery, setSearchQuery, debouncedQuery, isSearching } = useSearchStore();
   
@@ -172,10 +175,16 @@ export default function InvoicesPage() {
         const db = await initOfflineDB();
         await db.delete('pending_invoices', id);
         setInvoices(prev => prev.filter(inv => inv.id !== id));
+        if (selectedDayInvoices) {
+          setSelectedDayInvoices(prev => prev ? { ...prev, invoices: prev.invoices.filter(inv => inv.id !== id) } : null);
+        }
         return;
       }
       await fetch(`/api/invoices?id=${id}`, { method: 'DELETE' });
       setInvoices(prev => prev.filter(inv => inv.id !== id));
+      if (selectedDayInvoices) {
+        setSelectedDayInvoices(prev => prev ? { ...prev, invoices: prev.invoices.filter(inv => inv.id !== id) } : null);
+      }
     } catch (err) {
       console.error('Error deleting invoice:', err);
     }
@@ -187,6 +196,17 @@ export default function InvoicesPage() {
     
     setInvoices(prev => prev.map(inv => inv.id === invoice.id ? { ...inv, status: updatedStatus, paymentDate: updatedPaymentDate } : inv));
     
+    // Update active popover list if open
+    if (selectedDayInvoices) {
+      setSelectedDayInvoices(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          invoices: prev.invoices.map(inv => inv.id === invoice.id ? { ...inv, status: updatedStatus, resolvedStatus: updatedStatus === 'paid' ? 'paid' : 'pending', paymentDate: updatedPaymentDate } : inv)
+        };
+      });
+    }
+
     if (isOnline) {
       try {
         await fetch('/api/invoices', {
@@ -295,6 +315,16 @@ export default function InvoicesPage() {
     };
   });
 
+  const criticalPayments = processedInvoices
+    .filter(inv => inv.resolvedStatus !== 'paid' && 
+      (inv.lifecycle.urgency === 'overdue' || inv.lifecycle.urgency === 'critical' || inv.lifecycle.urgency === 'warning')
+    )
+    .sort((a, b) => {
+      const dateA = new Date(a.dueDate).getTime();
+      const dateB = new Date(b.dueDate).getTime();
+      return dateA - dateB;
+    });
+
   const filteredInvoices = processedInvoices.filter(inv => {
     const isStatusMatch = filterStatus === 'all' || inv.resolvedStatus === filterStatus;
     if (!searchQuery) return isStatusMatch;
@@ -364,6 +394,42 @@ export default function InvoicesPage() {
     alert(language === 'es' ? 'Exportación a Excel realizada con éxito.' : 'Excel exported successfully.');
   };
 
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= totalDays; d++) {
+      days.push(new Date(year, month, d));
+    }
+    
+    return days;
+  };
+
+  const getInvoicesForDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    return processedInvoices.filter(inv => inv.dueDate === dateStr);
+  };
+
+  const prevMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setSelectedDayInvoices(null);
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setSelectedDayInvoices(null);
+  };
+
   return (
     <div className="space-y-6">
       
@@ -386,6 +452,62 @@ export default function InvoicesPage() {
           {t.nuevaFactura}
         </button>
       </div>
+
+      {/* Próximos Pagos Críticos */}
+      {criticalPayments.length > 0 && (
+        <div className="bg-card border border-rose-500/20 rounded-2xl p-5 shadow-xs bg-gradient-to-r from-rose-500/[0.01] to-amber-500/[0.01]">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5 text-rose-500 animate-pulse" />
+            <h3 className="text-sm font-black text-[var(--foreground)]">
+              {language === 'es' ? 'Próximos Pagos Críticos y Vencidos' : 'Upcoming Critical & Overdue Payments'}
+            </h3>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-500 uppercase tracking-wider">
+              {criticalPayments.length} {language === 'es' ? 'Críticos' : 'Critical'}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {criticalPayments.map((inv) => (
+              <div 
+                key={inv.id}
+                className="bg-muted/30 border border-border/60 hover:border-border rounded-xl p-3 flex items-center justify-between gap-3 transition-all hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    inv.lifecycle.urgency === 'overdue' 
+                      ? 'bg-rose-500/15 text-rose-500' 
+                      : inv.lifecycle.urgency === 'critical'
+                      ? 'bg-red-500/15 text-red-500'
+                      : 'bg-amber-500/15 text-amber-500'
+                  }`}>
+                    {getCategoryIcon(inv.type)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs text-[var(--foreground)] truncate leading-tight">{inv.name}</p>
+                    <p className={`text-[9px] font-bold mt-0.5 ${
+                      inv.lifecycle.urgency === 'overdue' ? 'text-rose-500' :
+                      inv.lifecycle.urgency === 'critical' ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'
+                    }`}>
+                      {inv.lifecycle.daysText}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-black text-[var(--foreground)]">
+                    {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
+                  </span>
+                  <button 
+                    onClick={() => toggleInvoiceStatus(inv)}
+                    className="p-1 rounded-lg hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors cursor-pointer"
+                    title={language === 'es' ? 'Marcar como pagada' : 'Mark as paid'}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Registration Form */}
       {showForm && (
@@ -511,8 +633,6 @@ export default function InvoicesPage() {
               </div>
             </div>
 
-            {/* Conditional input replaced in grid layout above */}
-
             <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-border/40">
               <button 
                 onClick={() => setShowForm(false)}
@@ -589,6 +709,35 @@ export default function InvoicesPage() {
 
           <div className="h-6 w-[1px] bg-border mx-1 hidden xl:block shrink-0"></div>
 
+          <div className="flex items-center gap-1 bg-muted p-0.5 rounded-full border border-border/40 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                viewMode === 'list' 
+                  ? 'bg-card text-[var(--foreground)] shadow-xs' 
+                  : 'text-muted-foreground hover:text-[var(--foreground)]'
+              }`}
+            >
+              <Filter className="w-3 h-3" />
+              {language === 'es' ? 'Lista' : 'List'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                viewMode === 'calendar' 
+                  ? 'bg-card text-[var(--foreground)] shadow-xs' 
+                  : 'text-muted-foreground hover:text-[var(--foreground)]'
+              }`}
+            >
+              <Calendar className="w-3 h-3" />
+              {language === 'es' ? 'Calendario' : 'Calendar'}
+            </button>
+          </div>
+
+          <div className="h-6 w-[1px] bg-border mx-1 hidden xl:block shrink-0"></div>
+
           <button 
             onClick={handleExportPDF}
             className="flex items-center gap-1.5 px-4 py-2 bg-muted hover:bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold transition-all cursor-pointer"
@@ -604,267 +753,513 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Mobile Card List (visible only on mobile) */}
-      <div className="block md:hidden space-y-4">
-        {loading || isSearching ? (
-          <div className="p-8 text-center text-sm text-muted-foreground font-medium bg-card border border-border rounded-2xl shadow-xs">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
-              <span>{language === 'es' ? 'Buscando facturas...' : 'Searching bills...'}</span>
-            </div>
-          </div>
-        ) : filteredInvoices.length > 0 ? (
-          filteredInvoices.map((inv) => (
-            <div 
-              key={inv.id} 
-              className={`p-4 bg-card border rounded-2xl shadow-xs space-y-3 relative overflow-hidden transition-all ${
-                inv.resolvedStatus === 'overdue' ? 'border-rose-500/30 bg-rose-500/[0.02]' : 'border-border'
-              }`}
-            >
-              {/* Top Row: Icon + Title + Trash */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    inv.resolvedStatus === 'overdue' 
-                      ? 'bg-rose-500/10 text-rose-500' 
-                      : 'bg-[var(--primary)]/10 text-[var(--primary)]'
-                  }`}>
-                    {getCategoryIcon(inv.type)}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-[var(--foreground)] leading-tight">{inv.name}</h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {inv.type === 'Energía' ? (language === 'es' ? 'Energía' : 'Electricity') :
-                       inv.type === 'Agua' ? (language === 'es' ? 'Agua' : 'Water') :
-                       inv.type === 'Gas' ? (language === 'es' ? 'Gas' : 'Gas') :
-                       inv.type === 'Internet' ? (language === 'es' ? 'Internet' : 'Internet') :
-                       inv.type === 'Educación' ? t.educacion :
-                       inv.type === 'Salud' ? t.salud :
-                       inv.type === 'Transporte' ? (language === 'es' ? 'Transporte' : 'Transport') :
-                       inv.type === 'Entretenimiento' ? (language === 'es' ? 'Entretenimiento' : 'Entertainment') :
-                       t.otros} • {inv.description || t.otros}
-                    </p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => deleteInvoice(inv.id)}
-                  className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 shrink-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Middle Row: Dates */}
-              <div className="grid grid-cols-2 gap-4 py-2 border-t border-b border-border/40 text-[11px]">
-                <div>
-                  <span className="text-muted-foreground block font-medium mb-0.5">{language === 'es' ? 'Emisión' : 'Issued'}</span>
-                  <span className="font-semibold text-[var(--foreground)]">{inv.issueDate}</span>
-                </div>
-                <div>
-                  {inv.resolvedStatus === 'paid' ? (
-                    <div>
-                      <span className="text-emerald-500 block font-bold flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        {inv.lifecycle.label}
-                      </span>
-                      <span className="text-[9px] text-muted-foreground font-semibold">
-                        {inv.paymentDate}
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <span className="text-muted-foreground block font-medium mb-0.5">{language === 'es' ? 'Vencimiento' : 'Due'}</span>
-                      <span className={`font-bold ${inv.resolvedStatus === 'overdue' ? 'text-rose-500' : 'text-[var(--foreground)]'}`}>
-                        {inv.dueDate}
-                      </span>
-                    </div>
-                  )}
+      {/* List Layout View */}
+      {viewMode === 'list' && (
+        <>
+          {/* Mobile Card List (visible only on mobile) */}
+          <div className="block md:hidden space-y-4">
+            {loading || isSearching ? (
+              <div className="p-8 text-center text-sm text-muted-foreground font-medium bg-card border border-border rounded-2xl shadow-xs">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
+                  <span>{language === 'es' ? 'Buscando facturas...' : 'Searching bills...'}</span>
                 </div>
               </div>
-
-              {/* Bottom Row: Amount + Status Toggle */}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-base font-black text-[var(--foreground)]">
-                  {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
-                </span>
-                
-                <button 
-                  onClick={() => toggleInvoiceStatus(inv)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all active:scale-95 cursor-pointer ${
-                    inv.resolvedStatus === 'paid' 
-                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                      : inv.resolvedStatus === 'overdue'
-                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-xs'
-                      : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+            ) : filteredInvoices.length > 0 ? (
+              filteredInvoices.map((inv) => (
+                <div 
+                  key={inv.id} 
+                  className={`p-4 bg-card border rounded-2xl shadow-xs space-y-3 relative overflow-hidden transition-all ${
+                    inv.resolvedStatus === 'overdue' ? 'border-rose-500/30 bg-rose-500/[0.02]' : 'border-border'
                   }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    inv.resolvedStatus === 'paid' ? 'bg-emerald-500' :
-                    inv.resolvedStatus === 'overdue' ? 'bg-rose-500 animate-ping' :
-                    'bg-amber-500'
-                  }`}></span>
-                  {inv.lifecycle.label}
+                  {/* Top Row: Icon + Title + Trash */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        inv.resolvedStatus === 'overdue' 
+                          ? 'bg-rose-500/10 text-rose-500' 
+                          : 'bg-[var(--primary)]/10 text-[var(--primary)]'
+                      }`}>
+                        {getCategoryIcon(inv.type)}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-[var(--foreground)] leading-tight">{inv.name}</h4>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {inv.type === 'Energía' ? (language === 'es' ? 'Energía' : 'Electricity') :
+                           inv.type === 'Agua' ? (language === 'es' ? 'Agua' : 'Water') :
+                           inv.type === 'Gas' ? (language === 'es' ? 'Gas' : 'Gas') :
+                           inv.type === 'Internet' ? (language === 'es' ? 'Internet' : 'Internet') :
+                           inv.type === 'Educación' ? t.educacion :
+                           inv.type === 'Salud' ? t.salud :
+                           inv.type === 'Transporte' ? (language === 'es' ? 'Transporte' : 'Transport') :
+                           inv.type === 'Entretenimiento' ? (language === 'es' ? 'Entretenimiento' : 'Entertainment') :
+                           t.otros} • {inv.description || t.otros}
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => deleteInvoice(inv.id)}
+                      className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 shrink-0 cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Middle Row: Dates */}
+                  <div className="grid grid-cols-2 gap-4 py-2 border-t border-b border-border/40 text-[11px]">
+                    <div>
+                      <span className="text-muted-foreground block font-medium mb-0.5">{language === 'es' ? 'Emisión' : 'Issued'}</span>
+                      <span className="font-semibold text-[var(--foreground)]">{inv.issueDate}</span>
+                    </div>
+                    <div>
+                      {inv.resolvedStatus === 'paid' ? (
+                        <div>
+                          <span className="text-emerald-500 block font-bold flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            {inv.lifecycle.label}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground font-semibold">
+                            {inv.paymentDate}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-muted-foreground block font-medium mb-0.5">{language === 'es' ? 'Vencimiento' : 'Due'}</span>
+                          <span className={`font-bold ${inv.resolvedStatus === 'overdue' ? 'text-rose-500' : 'text-[var(--foreground)]'}`}>
+                            {inv.dueDate}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bottom Row: Amount + Status Toggle */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-base font-black text-[var(--foreground)]">
+                      {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
+                    </span>
+                    
+                    <button 
+                      onClick={() => toggleInvoiceStatus(inv)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all active:scale-95 cursor-pointer ${
+                        inv.resolvedStatus === 'paid' 
+                          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                          : inv.resolvedStatus === 'overdue'
+                          ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-xs'
+                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        inv.resolvedStatus === 'paid' ? 'bg-emerald-500' :
+                        inv.resolvedStatus === 'overdue' ? 'bg-rose-500 animate-ping' :
+                        'bg-amber-500'
+                      }`}></span>
+                      {inv.lifecycle.label}
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-sm text-muted-foreground font-medium bg-card border border-border rounded-2xl shadow-xs">
+                {searchQuery 
+                  ? (language === 'es' ? 'No se encontraron facturas coincidentes' : 'No matching bills found')
+                  : t.noInvoices}
+              </div>
+            )}
+          </div>
+
+          {/* Invoices Table (Desktop/Tablet) */}
+          <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border">
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">{t.factura}</th>
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">{t.categoria}</th>
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">
+                      {language === 'es' ? 'F. Emisión' : 'Issue Date'}
+                    </th>
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-center">
+                      {language === 'es' ? 'Vencimiento / Pago' : 'Due / Payment Date'}
+                    </th>
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-right">{t.importe}</th>
+                    <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-center">{t.status}</th>
+                    <th className="px-6 py-4"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {loading || isSearching ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground font-medium">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
+                          <span>{language === 'es' ? 'Buscando facturas...' : 'Searching bills...'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredInvoices.length > 0 ? (
+                    filteredInvoices.map((inv) => (
+                      <tr 
+                        key={inv.id} 
+                        className={`hover:bg-muted/10 transition-colors ${
+                          inv.resolvedStatus === 'overdue' ? 'bg-rose-500/[0.02]' : ''
+                        }`}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                              inv.resolvedStatus === 'overdue' 
+                                ? 'bg-rose-500/10 text-rose-500' 
+                                : 'bg-[var(--primary)]/10 text-[var(--primary)]'
+                            }`}>
+                              {getCategoryIcon(inv.type)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-sm text-[var(--foreground)]">{inv.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{inv.description || t.otros}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            {inv.type === 'Energía' ? (language === 'es' ? 'Energía' : 'Electricity') :
+                             inv.type === 'Agua' ? (language === 'es' ? 'Agua' : 'Water') :
+                             inv.type === 'Gas' ? (language === 'es' ? 'Gas' : 'Gas') :
+                             inv.type === 'Internet' ? (language === 'es' ? 'Internet' : 'Internet') :
+                             inv.type === 'Educación' ? t.educacion :
+                             inv.type === 'Salud' ? t.salud :
+                             inv.type === 'Transporte' ? (language === 'es' ? 'Transporte' : 'Transport') :
+                             inv.type === 'Entretenimiento' ? (language === 'es' ? 'Entretenimiento' : 'Entertainment') :
+                             t.otros}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-semibold text-muted-foreground">{inv.issueDate}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {inv.resolvedStatus === 'paid' ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-xs font-bold text-emerald-500 flex items-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                {inv.lifecycle.label}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground font-semibold">
+                                {language === 'es' ? `Pagado el: ` : `Paid: `}{inv.paymentDate}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-xs font-semibold text-muted-foreground">{inv.dueDate}</span>
+                              <span className={`text-[10px] px-2 py-0.5 mt-1 rounded-full font-bold border ${inv.lifecycle.colorClass}`}>
+                                {inv.lifecycle.daysText}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right font-black text-sm text-[var(--foreground)]">
+                          {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button 
+                            onClick={() => toggleInvoiceStatus(inv)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                              inv.resolvedStatus === 'paid' 
+                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                                : inv.resolvedStatus === 'overdue'
+                                ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-xs'
+                                : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              inv.resolvedStatus === 'paid' ? 'bg-emerald-500' :
+                              inv.resolvedStatus === 'overdue' ? 'bg-rose-500 animate-ping' :
+                              'bg-amber-500'
+                            }`}></span>
+                            {inv.lifecycle.label}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => deleteInvoice(inv.id)}
+                            className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground font-medium">
+                        {searchQuery 
+                          ? (language === 'es' ? 'No se encontraron facturas coincidentes' : 'No matching bills found')
+                          : t.noInvoices}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Table Footer */}
+            <div className="px-6 py-4 flex items-center justify-between border-t border-border/60">
+              <p className="text-xs text-muted-foreground font-medium">
+                {language === 'es' ? `Mostrando ${filteredInvoices.length} facturas` : `Showing ${filteredInvoices.length} bills`}
+              </p>
+              <div className="flex gap-2">
+                <button className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30" disabled>
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30" disabled>
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="p-8 text-center text-sm text-muted-foreground font-medium bg-card border border-border rounded-2xl shadow-xs">
-            {searchQuery 
-              ? (language === 'es' ? 'No se encontraron facturas coincidentes' : 'No matching bills found')
-              : t.noInvoices}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Invoices Table (Desktop/Tablet) */}
-      <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border">
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">{t.factura}</th>
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">{t.categoria}</th>
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider">
-                  {language === 'es' ? 'F. Emisión' : 'Issue Date'}
-                </th>
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-center">
-                  {language === 'es' ? 'Vencimiento / Pago' : 'Due / Payment Date'}
-                </th>
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-right">{t.importe}</th>
-                <th className="px-6 py-4 font-bold text-xs text-muted-foreground uppercase tracking-wider text-center">{t.status}</th>
-                <th className="px-6 py-4"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {loading || isSearching ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground font-medium">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
-                      <span>{language === 'es' ? 'Buscando facturas...' : 'Searching bills...'}</span>
+      {/* Calendar Layout View */}
+      {viewMode === 'calendar' && (
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-border/40 pb-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[var(--primary)]" />
+              <h2 className="text-sm font-black text-[var(--foreground)] capitalize">
+                {currentDate.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { month: 'long', year: 'numeric' })}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={prevMonth}
+                className="p-2 border border-border rounded-xl hover:bg-muted transition-colors active:scale-95 cursor-pointer text-muted-foreground"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => {
+                  setCurrentDate(new Date());
+                  setSelectedDayInvoices(null);
+                }}
+                className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-xs font-bold transition-colors active:scale-95 cursor-pointer text-muted-foreground"
+              >
+                {language === 'es' ? 'Hoy' : 'Today'}
+              </button>
+              <button 
+                onClick={nextMonth}
+                className="p-2 border border-border rounded-xl hover:bg-muted transition-colors active:scale-95 cursor-pointer text-muted-foreground"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Grid Headers: Sun - Sat */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] font-black text-muted-foreground uppercase tracking-wider">
+            {['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'].map((day, idx) => (
+              <div key={idx} className="py-2">
+                {language === 'es' ? day : ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][idx]}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Cells */}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 auto-rows-[75px] sm:auto-rows-[95px]">
+            {getDaysInMonth(currentDate).map((day, idx) => {
+              if (!day) {
+                return (
+                  <div 
+                    key={`empty-${idx}`} 
+                    className="bg-muted/5 border border-transparent rounded-xl"
+                  />
+                );
+              }
+
+              const dayInvoices = getInvoicesForDate(day);
+              const dayInvoicesFiltered = dayInvoices.filter(inv => {
+                return filterStatus === 'all' || inv.resolvedStatus === filterStatus;
+              });
+
+              const isToday = new Date().toDateString() === day.toDateString();
+              
+              // Count status types for indicator badges
+              const overdueCount = dayInvoicesFiltered.filter(inv => inv.resolvedStatus === 'overdue').length;
+              const pendingCount = dayInvoicesFiltered.filter(inv => inv.resolvedStatus === 'pending').length;
+              const paidCount = dayInvoicesFiltered.filter(inv => inv.resolvedStatus === 'paid').length;
+
+              return (
+                <button
+                  key={day.toISOString()}
+                  onClick={() => setSelectedDayInvoices({ date: day, invoices: dayInvoices })}
+                  className={`relative p-2 bg-muted/10 hover:bg-muted/20 border text-left rounded-xl transition-all flex flex-col justify-between items-stretch overflow-hidden group active:scale-98 cursor-pointer ${
+                    isToday 
+                      ? 'border-[var(--primary)] ring-2 ring-[var(--primary)]/10 bg-[var(--primary)]/[0.02]' 
+                      : 'border-border/60'
+                  }`}
+                >
+                  <span className={`text-[10px] font-bold shrink-0 flex items-center justify-center w-5 h-5 rounded-full ${
+                    isToday ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-extrabold' : 'text-[var(--foreground)]'
+                  }`}>
+                    {day.getDate()}
+                  </span>
+
+                  <div className="flex-1 flex flex-col justify-end gap-1 overflow-hidden">
+                    {/* Small dot indicators */}
+                    <div className="flex flex-wrap gap-1 mt-1 justify-end sm:justify-start">
+                      {overdueCount > 0 && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" title="Vencido" />
+                      )}
+                      {pendingCount > 0 && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Pendiente" />
+                      )}
+                      {paidCount > 0 && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Pagado" />
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ) : filteredInvoices.length > 0 ? (
-                filteredInvoices.map((inv) => (
-                  <tr 
-                    key={inv.id} 
-                    className={`hover:bg-muted/10 transition-colors ${
-                      inv.resolvedStatus === 'overdue' ? 'bg-rose-500/[0.02]' : ''
-                    }`}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                          inv.resolvedStatus === 'overdue' 
+                    {/* Number of invoices list representation for desktop */}
+                    {dayInvoicesFiltered.length > 0 && (
+                      <span className="hidden sm:block text-[8px] font-black text-muted-foreground leading-none truncate">
+                        {dayInvoicesFiltered.length} {dayInvoicesFiltered.length === 1 ? (language === 'es' ? 'factura' : 'bill') : (language === 'es' ? 'facturas' : 'bills')}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Day Detail Modal/Popover */}
+      {selectedDayInvoices && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl p-6 relative overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Background glowing gradients */}
+            <div className="absolute top-0 right-0 w-36 h-36 bg-[var(--primary)]/5 rounded-full blur-2xl -z-10" />
+            <div className="absolute bottom-0 left-0 w-36 h-36 bg-amber-500/5 rounded-full blur-2xl -z-10" />
+
+            <div className="flex items-center justify-between mb-4 border-b border-border/40 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-[var(--foreground)]">
+                  {language === 'es' ? 'Facturas para el' : 'Invoices for'} {selectedDayInvoices.date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </h3>
+                <p className="text-[10px] text-muted-foreground font-semibold">
+                  {selectedDayInvoices.invoices.length} {selectedDayInvoices.invoices.length === 1 ? (language === 'es' ? 'factura programada' : 'scheduled bill') : (language === 'es' ? 'facturas programadas' : 'scheduled bills')}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedDayInvoices(null)}
+                className="text-muted-foreground hover:bg-muted p-1.5 rounded-full transition-colors cursor-pointer"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {selectedDayInvoices.invoices.length > 0 ? (
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {selectedDayInvoices.invoices.map((inv) => {
+                  const lifecycle = getInvoiceLifecycle(inv);
+                  const resolvedStatus = inv.status === 'paid' ? 'paid' : lifecycle.urgency === 'overdue' ? 'overdue' : 'pending';
+
+                  return (
+                    <div 
+                      key={inv.id}
+                      className={`p-3 bg-muted/20 border rounded-xl flex items-center justify-between gap-4 transition-colors hover:bg-muted/30 ${
+                        resolvedStatus === 'overdue' ? 'border-rose-500/20 bg-rose-500/[0.01]' : 'border-border/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          resolvedStatus === 'overdue' 
                             ? 'bg-rose-500/10 text-rose-500' 
                             : 'bg-[var(--primary)]/10 text-[var(--primary)]'
                         }`}>
                           {getCategoryIcon(inv.type)}
                         </div>
-                        <div>
-                          <p className="font-bold text-sm text-[var(--foreground)]">{inv.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{inv.description || t.otros}</p>
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-[var(--foreground)] truncate leading-tight">{inv.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${
+                              resolvedStatus === 'paid' 
+                                ? 'bg-emerald-500/10 text-emerald-500' 
+                                : resolvedStatus === 'overdue'
+                                ? 'bg-rose-500/10 text-rose-500'
+                                : 'bg-amber-500/10 text-amber-500'
+                            }`}>
+                              {lifecycle.label}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground font-semibold">
+                              {lifecycle.daysText}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {inv.type === 'Energía' ? (language === 'es' ? 'Energía' : 'Electricity') :
-                         inv.type === 'Agua' ? (language === 'es' ? 'Agua' : 'Water') :
-                         inv.type === 'Gas' ? (language === 'es' ? 'Gas' : 'Gas') :
-                         inv.type === 'Internet' ? (language === 'es' ? 'Internet' : 'Internet') :
-                         inv.type === 'Educación' ? t.educacion :
-                         inv.type === 'Salud' ? t.salud :
-                         inv.type === 'Transporte' ? (language === 'es' ? 'Transporte' : 'Transport') :
-                         inv.type === 'Entretenimiento' ? (language === 'es' ? 'Entretenimiento' : 'Entertainment') :
-                         t.otros}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-semibold text-muted-foreground">{inv.issueDate}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {inv.resolvedStatus === 'paid' ? (
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs font-bold text-emerald-500 flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            {inv.lifecycle.label}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground font-semibold">
-                            {language === 'es' ? `Pagado el: ` : `Paid: `}{inv.paymentDate}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs font-semibold text-muted-foreground">{inv.dueDate}</span>
-                          <span className={`text-[10px] px-2 py-0.5 mt-1 rounded-full font-bold border ${inv.lifecycle.colorClass}`}>
-                            {inv.lifecycle.daysText}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right font-black text-sm text-[var(--foreground)]">
-                      {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button 
-                        onClick={() => toggleInvoiceStatus(inv)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                          inv.resolvedStatus === 'paid' 
-                            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                            : inv.resolvedStatus === 'overdue'
-                            ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-xs'
-                            : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          inv.resolvedStatus === 'paid' ? 'bg-emerald-500' :
-                          inv.resolvedStatus === 'overdue' ? 'bg-rose-500 animate-ping' :
-                          'bg-amber-500'
-                        }`}></span>
-                        {inv.lifecycle.label}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => deleteInvoice(inv.id)}
-                        className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground font-medium">
-                    {searchQuery 
-                      ? (language === 'es' ? 'No se encontraron facturas coincidentes' : 'No matching bills found')
-                      : t.noInvoices}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* Table Footer */}
-        <div className="px-6 py-4 flex items-center justify-between border-t border-border/60">
-          <p className="text-xs text-muted-foreground font-medium">
-            {language === 'es' ? `Mostrando ${filteredInvoices.length} facturas` : `Showing ${filteredInvoices.length} bills`}
-          </p>
-          <div className="flex gap-2">
-            <button className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30" disabled>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30" disabled>
-              <ChevronRight className="w-4 h-4" />
-            </button>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="text-xs font-black text-[var(--foreground)]">
+                          {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
+                        </span>
+                        
+                        <button
+                          onClick={() => toggleInvoiceStatus(inv)}
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                            resolvedStatus === 'paid'
+                              ? 'border-emerald-500/20 hover:bg-emerald-500/10 text-emerald-500'
+                              : 'border-border/60 hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground'
+                          }`}
+                          title={resolvedStatus === 'paid' ? (language === 'es' ? 'Marcar como pendiente' : 'Mark as pending') : (language === 'es' ? 'Marcar como pagada' : 'Mark as paid')}
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => deleteInvoice(inv.id)}
+                          className="p-1.5 rounded-lg border border-border/60 hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition-colors cursor-pointer"
+                          title={language === 'es' ? 'Eliminar factura' : 'Delete bill'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-xs text-muted-foreground font-medium">
+                {language === 'es' ? 'No hay facturas registradas para este día.' : 'No invoices registered for this day.'}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6 border-t border-border/40 pt-4">
+              <button
+                onClick={() => {
+                  const dateStr = selectedDayInvoices.date.toISOString().split('T')[0];
+                  setSelectedDayInvoices(null);
+                  setShowForm(true);
+                  // Allow form opening and prefill
+                  setTimeout(() => {
+                    const elDueDate = document.getElementsByName('dueDate')[0] as HTMLInputElement;
+                    if (elDueDate) elDueDate.value = dateStr;
+                    const elIssueDate = document.getElementsByName('issueDate')[0] as HTMLInputElement;
+                    if (elIssueDate) elIssueDate.value = dateStr;
+                  }, 100);
+                }}
+                className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {language === 'es' ? 'Agregar Factura' : 'Add Bill'}
+              </button>
+              <button
+                onClick={() => setSelectedDayInvoices(null)}
+                className="px-4 py-2 border border-border text-muted-foreground text-xs font-bold rounded-xl hover:bg-muted transition-colors cursor-pointer"
+              >
+                {language === 'es' ? 'Cerrar' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
     </div>
   );
