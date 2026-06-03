@@ -37,6 +37,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
     }
 
+    // Mercado Pago Developer Sandbox testing tool uses a fake payment ID "123456"
+    // to test webhook connectivity. We bypass the verification query and return 200 OK.
+    if (paymentId === '123456') {
+      console.log('[MERCADO PAGO WEBHOOK] Sandbox connectivity test received successfully (ID: 123456)');
+      return NextResponse.json({ success: true, message: 'Test webhook verified successfully' });
+    }
+
     // Fetch real payment status directly from Mercado Pago API
     console.log(`[MERCADO PAGO WEBHOOK] Fetching payment details for ID: ${paymentId}`);
     const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
