@@ -34,7 +34,7 @@ import { Income } from '@/core/entities/Income';
 import { Expense } from '@/core/entities/Expense';
 import { Invoice } from '@/core/entities/Invoice';
 import { SavingsGoal } from '@/core/entities/SavingsGoal';
-import { formatCurrencyValue } from '@/utils/currency';
+import { formatCurrencyValue, formatCompactNumber } from '@/utils/currency';
 
 // Dynamically import Recharts to avoid SSR hydration mismatches
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
@@ -499,7 +499,7 @@ export default function DashboardPage() {
         
         <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorIncomes" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2}/>
@@ -511,7 +511,7 @@ export default function DashboardPage() {
                 </linearGradient>
               </defs>
               <XAxis dataKey="day" tickLine={false} axisLine={false} style={{ fontSize: '11px', fill: 'var(--muted-foreground)' }} />
-              <YAxis tickLine={false} axisLine={false} style={{ fontSize: '11px', fill: 'var(--muted-foreground)' }} />
+              <YAxis tickLine={false} axisLine={false} tickFormatter={formatCompactNumber} style={{ fontSize: '11px', fill: 'var(--muted-foreground)' }} />
               <Tooltip 
                 contentStyle={{ 
                   backgroundColor: 'var(--card)', 
@@ -520,6 +520,13 @@ export default function DashboardPage() {
                   fontSize: '12px',
                   color: 'var(--foreground)'
                 }} 
+                formatter={(value: any, name: any) => {
+                  const formattedValue = formatCurrencyValue(Number(value), user?.currency || 'EUR', language);
+                  let displayName = name;
+                  if (name === 'incomes') displayName = t.incomes;
+                  else if (name === 'expenses') displayName = t.expenses;
+                  return [formattedValue, displayName];
+                }}
               />
               <Area type="monotone" dataKey="incomes" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorIncomes)" />
               <Area type="monotone" dataKey="expenses" stroke="var(--error)" strokeWidth={2} strokeDasharray="5 5" fillOpacity={1} fill="url(#colorExpenses)" />

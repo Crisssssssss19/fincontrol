@@ -74,3 +74,30 @@ export function formatCurrencyValue(
   });
   return `${formatted} ${cleanCurrency}`;
 }
+
+/**
+ * Formats a number to a compact string format (e.g. 1.2K, -35K, 2.5M).
+ * 
+ * @param value The numeric value to format
+ * @returns The formatted compact string
+ */
+export function formatCompactNumber(value: number): string {
+  const absValue = Math.abs(value);
+  const isNegative = value < 0;
+  
+  if (absValue === 0) return '0';
+  
+  let formatted = '';
+  if (absValue >= 1e9) {
+    formatted = (absValue / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  } else if (absValue >= 1e6) {
+    formatted = (absValue / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  } else if (absValue >= 1e3) {
+    formatted = (absValue / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  } else {
+    formatted = absValue.toString();
+  }
+  
+  return isNegative ? `-${formatted}` : formatted;
+}
+
