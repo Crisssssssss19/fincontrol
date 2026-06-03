@@ -30,13 +30,8 @@ function DonacionesPageContent() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [activeGateway, setActiveGateway] = useState<'mercadopago' | 'paypal' | null>(null);
 
-  // Goal & Confirmation States
+  // Goal State
   const [raisedAmount, setRaisedAmount] = useState<number>(0);
-  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
-  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
-  const [payPalPrefId, setPayPalPrefId] = useState<string>('');
-  const [payPalAmount, setPayPalAmount] = useState<number>(0);
-  const [isConfirmingPayPal, setIsConfirmingPayPal] = useState<boolean>(false);
 
   const goalAmount = 50.00; // Monthly donation goal
   const percentage = Math.min(100, Math.round((raisedAmount / goalAmount) * 100));
@@ -110,7 +105,7 @@ function DonacionesPageContent() {
     }
   };
 
-  // Trigger real Mercado Pago or PayPal preference creation
+  // Trigger real Mercado Pago or PayPal preference creation and redirect in the same window
   const handleDonate = async (gateway: 'mercadopago' | 'paypal') => {
     const amount = getDonationAmount();
     if (!validateAmount(amount)) return;
@@ -129,22 +124,8 @@ function DonacionesPageContent() {
       const data = await res.json();
       
       if (res.ok && data.success && data.url) {
-        if (gateway === 'paypal') {
-          // Open PayPal in a new tab
-          window.open(data.url, '_blank');
-          
-          // Setup state for local confirmation modal
-          setPayPalPrefId(data.preferenceId || '');
-          setPayPalAmount(amount);
-          setShowConfirmModal(true);
-          
-          // Reset loading states
-          setIsProcessing(false);
-          setActiveGateway(null);
-        } else {
-          // Redirect user directly to Mercado Pago Checkout Pro
-          window.location.href = data.url;
-        }
+        // Securely redirect to payment gateway in the same tab
+        window.location.href = data.url;
       } else {
         setErrorMsg(
           data.error || 
@@ -164,37 +145,6 @@ function DonacionesPageContent() {
       );
       setIsProcessing(false);
       setActiveGateway(null);
-    }
-  };
-
-  // Confirm PayPal donation
-  const handleConfirmPayPalDonation = async () => {
-    if (!payPalPrefId) return;
-
-    setIsConfirmingPayPal(true);
-    
-    try {
-      const res = await fetch('/api/donaciones/confirmar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preferenceId: payPalPrefId })
-      });
-
-      // Whether API updates DB successfully or falls back, we update client side state for smooth UX
-      const newRaised = raisedAmount + payPalAmount;
-      setRaisedAmount(newRaised);
-      localStorage.setItem('fincontrol_donation_progress', String(newRaised));
-      setShowConfirmModal(false);
-      setShowSuccessModal(true);
-    } catch (err) {
-      console.error('Error confirming PayPal donation:', err);
-      const newRaised = raisedAmount + payPalAmount;
-      setRaisedAmount(newRaised);
-      localStorage.setItem('fincontrol_donation_progress', String(newRaised));
-      setShowConfirmModal(false);
-      setShowSuccessModal(true);
-    } finally {
-      setIsConfirmingPayPal(false);
     }
   };
 
@@ -547,110 +497,6 @@ function DonacionesPageContent() {
           </div>
         </div>
       </div>
-
-      {/* PayPal Confirmation Modal */}
-      {showConfirmModal && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-card border border-border rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#FFC439]" />
-            
-            <div className="space-y-6 text-center pt-2">
-              <div className="w-14 h-14 rounded-2xl bg-[#FFC439]/15 text-[#003087] flex items-center justify-center mx-auto shadow-xs border border-[#FFC439]/20">
-                <Heart className="w-8 h-8 fill-current text-[#003087] animate-pulse" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-lg font-black text-[var(--foreground)]">
-                  {language === 'es' ? '¿Completaste tu donación?' : 'Did you complete your donation?'}
-                </h3>
-                <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                  {language === 'es' 
-                    ? `Hemos abierto PayPal en una pestaña nueva para tu donación de $${payPalAmount.toFixed(2)} USD. Una vez confirmes el pago, haz clic en el botón de abajo para registrar tu aporte.` 
-                    : `We opened PayPal in a new tab for your donation of $${payPalAmount.toFixed(2)} USD. Once you complete the payment, click below to register your support.`}
-                </p>
-              </div>
-
-              <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={handleConfirmPayPalDonation}
-                  disabled={isConfirmingPayPal}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs py-3.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  {isConfirmingPayPal ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <span>{language === 'es' ? 'Sí, he donado' : 'Yes, I have donated'}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmModal(false)}
-                  disabled={isConfirmingPayPal}
-                  className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground font-bold text-xs py-3.5 px-4 rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-                >
-                  {language === 'es' ? 'Cancelar' : 'Cancel'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Grand Success Celebration Modal */}
-      {showSuccessModal && (
-        <div 
-          className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-card border border-border rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300 text-center">
-            {/* Success confetti border top */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-green-500" />
-            
-            <div className="space-y-6 pt-2">
-              <div className="w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto shadow-xs border border-emerald-500/20 relative animate-bounce">
-                <Sparkles className="w-10 h-10 text-emerald-500" />
-                <Heart className="w-5 h-5 fill-current text-red-500 absolute -bottom-1 -right-1 animate-pulse" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl font-black text-[var(--foreground)]">
-                  {language === 'es' ? '¡Muchísimas Gracias! ❤️' : 'Thank You So Much! ❤️'}
-                </h3>
-                <p className="text-xs text-muted-foreground font-semibold leading-relaxed">
-                  {language === 'es' 
-                    ? 'Tu donación ha sido registrada. Has contribuido a mantener FinControl activo y gratuito para todos. ¡Agradecemos inmensamente tu apoyo!' 
-                    : 'Your donation has been registered. You have contributed to keeping FinControl active and free for everyone. We immensely appreciate your support!'}
-                </p>
-              </div>
-
-              <div className="bg-muted/30 p-4 rounded-2xl border border-border/40 inline-block w-full">
-                <span className="text-xs font-bold text-muted-foreground uppercase block tracking-wider mb-1">
-                  {language === 'es' ? 'Tu Donación' : 'Your Donation'}
-                </span>
-                <span className="text-2xl font-black text-emerald-500">
-                  ${payPalAmount > 0 ? payPalAmount.toFixed(2) : '5.00'} USD
-                </span>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSuccessModal(false)}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-sm py-4 px-6 rounded-2xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>{language === 'es' ? 'De nada / Entendido' : 'You are welcome / Got it'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

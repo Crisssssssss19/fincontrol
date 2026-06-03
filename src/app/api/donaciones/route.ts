@@ -19,8 +19,9 @@ export async function POST(req: Request) {
 
     if (gateway === 'paypal') {
       const paypalEmail = process.env.NEXT_PUBLIC_PAYPAL_EMAIL || 'pena92992@gmail.com';
-      const paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(paypalEmail)}&amount=${amount}&currency_code=USD&no_recurring=0`;
       const preferenceId = `paypal_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(paypalEmail)}&amount=${amount}&currency_code=USD&no_recurring=1&return=${encodeURIComponent(`${baseUrl}/donacion/exito?gateway=paypal&preferenceId=${preferenceId}&amount=${amount}`)}&cancel_return=${encodeURIComponent(`${baseUrl}/donacion/error`)}&rm=1`;
 
       // Record pending PayPal donation in database
       if (hasSupabaseKeys) {
