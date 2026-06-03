@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 
 const resendApiKey = process.env.RESEND_API_KEY || 're_mock_key';
 const resend = new Resend(resendApiKey);
+const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'FinControl <noreply@resend.dev>';
 
 export class ResendEmailService {
   static async sendMail(to: string, subject: string, html: string): Promise<boolean> {
@@ -27,7 +28,7 @@ export class ResendEmailService {
         }
 
         const { data, error } = await resend.emails.send({
-          from: 'FinControl <noreply@resend.dev>', // Resend free tier sends from noreply@resend.dev
+          from: resendFromEmail,
           to,
           subject,
           html,
@@ -38,6 +39,11 @@ export class ResendEmailService {
         }
 
         console.log(`[EMAIL SERVICE] Successfully sent email on attempt ${attempts}. Data:`, data);
+        console.log(`[EMAIL SERVICE LOG] Contenido del correo enviado (Copia el código de aquí):
+        Para: ${to}
+        Asunto: ${subject}
+        Cuerpo: ${html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()}
+        `);
         success = true;
       } catch (err: any) {
         lastError = err;
@@ -50,7 +56,12 @@ export class ResendEmailService {
     }
 
     if (!success) {
-      console.error(`[EMAIL SERVICE] Permanently failed to send email to ${to} after ${maxRetries} attempts. Last error:`, lastError);
+      console.error(`[EMAIL SERVICE] Permanently failed to send email to ${to} after ${maxRetries} attempts. Last error:`, lastError?.message || lastError);
+      console.warn(`[EMAIL SERVICE FALLBACK] Since the email failed to send, here is the text content for debugging/testing:
+      To: ${to}
+      Subject: ${subject}
+      Body: ${html.replace(/<[^>]*>/g, '').trim()}
+      `);
     }
 
     return success;
