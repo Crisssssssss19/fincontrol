@@ -14,7 +14,9 @@ import {
   ShieldAlert, 
   Coins,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Target,
+  TrendingUp
 } from 'lucide-react';
 import { useLanguageStore } from '@/store/useLanguageStore';
 
@@ -26,11 +28,50 @@ function DonacionesPageContent() {
   const [customAmount, setCustomAmount] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [activeGateway, setActiveGateway] = useState<'mercadopago' | 'paypal' | null>(null);
+
+  // Goal & Confirmation States
+  const [raisedAmount, setRaisedAmount] = useState<number>(0);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [payPalPrefId, setPayPalPrefId] = useState<string>('');
+  const [payPalAmount, setPayPalAmount] = useState<number>(0);
+  const [isConfirmingPayPal, setIsConfirmingPayPal] = useState<boolean>(false);
+
+  const goalAmount = 50.00; // Monthly donation goal
+  const percentage = Math.min(100, Math.round((raisedAmount / goalAmount) * 100));
 
   // Dynamic document title for SEO
   useEffect(() => {
     document.title = `${language === 'es' ? 'Donaciones' : 'Donations'} - FinControl`;
   }, [language]);
+
+  // Load monthly donation progress from database on mount
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        const res = await fetch('/api/donaciones');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && typeof data.totalApprovedUSD === 'number') {
+            setRaisedAmount(data.totalApprovedUSD);
+            localStorage.setItem('fincontrol_donation_progress', String(data.totalApprovedUSD));
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching donation progress:', err);
+      }
+      
+      // Fallback to localStorage
+      const cached = localStorage.getItem('fincontrol_donation_progress');
+      if (cached) {
+        setRaisedAmount(parseFloat(cached) || 0);
+      }
+    };
+
+    fetchProgress();
+  }, []);
 
   // Calculate current donation amount
   const getDonationAmount = (): number => {
@@ -69,11 +110,12 @@ function DonacionesPageContent() {
     }
   };
 
-  // Trigger real Mercado Pago Checkout Pro preference creation and redirect
-  const handleDonate = async () => {
+  // Trigger real Mercado Pago or PayPal preference creation
+  const handleDonate = async (gateway: 'mercadopago' | 'paypal') => {
     const amount = getDonationAmount();
     if (!validateAmount(amount)) return;
 
+    setActiveGateway(gateway);
     setIsProcessing(true);
     setErrorMsg('');
 
@@ -81,22 +123,37 @@ function DonacionesPageContent() {
       const res = await fetch('/api/donaciones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount })
+        body: JSON.stringify({ amount, gateway })
       });
 
       const data = await res.json();
       
       if (res.ok && data.success && data.url) {
-        // Redirect user directly to Mercado Pago Checkout Pro
-        window.location.href = data.url;
+        if (gateway === 'paypal') {
+          // Open PayPal in a new tab
+          window.open(data.url, '_blank');
+          
+          // Setup state for local confirmation modal
+          setPayPalPrefId(data.preferenceId || '');
+          setPayPalAmount(amount);
+          setShowConfirmModal(true);
+          
+          // Reset loading states
+          setIsProcessing(false);
+          setActiveGateway(null);
+        } else {
+          // Redirect user directly to Mercado Pago Checkout Pro
+          window.location.href = data.url;
+        }
       } else {
         setErrorMsg(
           data.error || 
           (language === 'es' 
-            ? 'Error al generar la pasarela de Mercado Pago. Inténtalo de nuevo.' 
-            : 'Error creating Mercado Pago checkout. Please try again.')
+            ? `Error al generar la pasarela de ${gateway === 'paypal' ? 'PayPal' : 'Mercado Pago'}. Inténtalo de nuevo.` 
+            : `Error creating ${gateway === 'paypal' ? 'PayPal' : 'Mercado Pago'} checkout. Please try again.`)
         );
         setIsProcessing(false);
+        setActiveGateway(null);
       }
     } catch (err: any) {
       console.error(err);
@@ -106,6 +163,38 @@ function DonacionesPageContent() {
           : 'Connection error. Check your network configuration.'
       );
       setIsProcessing(false);
+      setActiveGateway(null);
+    }
+  };
+
+  // Confirm PayPal donation
+  const handleConfirmPayPalDonation = async () => {
+    if (!payPalPrefId) return;
+
+    setIsConfirmingPayPal(true);
+    
+    try {
+      const res = await fetch('/api/donaciones/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferenceId: payPalPrefId })
+      });
+
+      // Whether API updates DB successfully or falls back, we update client side state for smooth UX
+      const newRaised = raisedAmount + payPalAmount;
+      setRaisedAmount(newRaised);
+      localStorage.setItem('fincontrol_donation_progress', String(newRaised));
+      setShowConfirmModal(false);
+      setShowSuccessModal(true);
+    } catch (err) {
+      console.error('Error confirming PayPal donation:', err);
+      const newRaised = raisedAmount + payPalAmount;
+      setRaisedAmount(newRaised);
+      localStorage.setItem('fincontrol_donation_progress', String(newRaised));
+      setShowConfirmModal(false);
+      setShowSuccessModal(true);
+    } finally {
+      setIsConfirmingPayPal(false);
     }
   };
 
@@ -231,8 +320,64 @@ function DonacionesPageContent() {
           </div>
         </div>
 
-        {/* Right Column: Donation Form Card */}
+        {/* Right Column: Goal Tracker & Donation Form */}
         <div className="lg:col-span-7 space-y-6">
+          {/* Monthly Goal Tracker */}
+          <div className="bg-card border border-border rounded-3xl p-6 shadow-md relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl translate-x-8 -translate-y-8" />
+            <div className="space-y-4 relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-sm font-black text-[var(--foreground)]">
+                    {language === 'es' ? 'Meta Mensual de Donaciones' : 'Monthly Donation Goal'}
+                  </h3>
+                </div>
+                <span className="text-xs font-black text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                  {percentage}%
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="h-3 w-full bg-muted rounded-full overflow-hidden relative border border-border/20">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 via-[var(--primary)] to-blue-500 rounded-full transition-all duration-1000 ease-out" 
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground pt-1">
+                <span>
+                  {language === 'es' ? 'Recaudado' : 'Raised'}: <strong className="text-[var(--foreground)]">${raisedAmount.toFixed(2)} USD</strong>
+                </span>
+                <span>
+                  {language === 'es' ? 'Meta' : 'Goal'}: <strong className="text-[var(--foreground)]">${goalAmount.toFixed(2)} USD</strong>
+                </span>
+              </div>
+
+              {raisedAmount < goalAmount ? (
+                <p className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>
+                    {language === 'es' 
+                      ? `Faltan $${(goalAmount - raisedAmount).toFixed(2)} USD para cumplir nuestra meta de este mes.`
+                      : `$${(goalAmount - raisedAmount).toFixed(2)} USD remaining to reach our goal this month.`}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 animate-pulse">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'es' 
+                      ? '¡Hemos alcanzado la meta mensual! Muchas gracias a todos los donantes.' 
+                      : 'We have reached the monthly goal! Thank you so much to all donors.'}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Donation Form Card */}
           <div className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-md relative overflow-hidden">
             {/* Design accents */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-[var(--primary)] to-emerald-400" />
@@ -350,40 +495,162 @@ function DonacionesPageContent() {
                 </div>
               )}
 
-              {/* Checkout Button */}
-              <div className="pt-4">
+              {/* Checkout Buttons */}
+              <div className="pt-4 space-y-3">
+                {/* Mercado Pago */}
                 <button
                   type="button"
-                  onClick={handleDonate}
+                  onClick={() => handleDonate('mercadopago')}
                   disabled={isProcessing || selectedOption === null || (selectedOption === 'custom' && (customAmount === '' || !!errorMsg))}
                   className="w-full bg-[#009EE3] hover:bg-[#008ac7] text-white font-black text-sm px-6 py-4 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 group disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100"
                 >
                   <span>{language === 'es' ? 'Donar con Mercado Pago' : 'Donate with Mercado Pago'}</span>
                   <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
+
+                {/* PayPal */}
+                <button
+                  type="button"
+                  onClick={() => handleDonate('paypal')}
+                  disabled={isProcessing || selectedOption === null || (selectedOption === 'custom' && (customAmount === '' || !!errorMsg))}
+                  className="w-full bg-[#FFC439] hover:bg-[#e2af30] text-[#003087] font-black text-sm px-6 py-4 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 group disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100"
+                >
+                  <span>{language === 'es' ? 'Donar con PayPal' : 'Donate with PayPal'}</span>
+                  <ChevronRight className="w-4 h-4 text-[#003087] transition-transform group-hover:translate-x-1" />
+                </button>
               </div>
             </div>
 
             {/* Loading Indicator */}
-            {isProcessing && (
+            {isProcessing && activeGateway && (
               <div className="absolute inset-0 bg-background/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300 z-50">
                 <div className="relative flex items-center justify-center mb-4">
-                  <div className="w-12 h-12 rounded-full border-4 border-[#009EE3] border-t-transparent animate-spin" />
-                  <span className="absolute text-[8px] font-black text-[#009EE3]">MP</span>
+                  <div className={`w-12 h-12 rounded-full border-4 ${
+                    activeGateway === 'paypal' ? 'border-[#FFC439]' : 'border-[#009EE3]'
+                  } border-t-transparent animate-spin`} />
+                  <span className={`absolute text-[8px] font-black ${
+                    activeGateway === 'paypal' ? 'text-[#003087]' : 'text-[#009EE3]'
+                  }`}>
+                    {activeGateway === 'paypal' ? 'PP' : 'MP'}
+                  </span>
                 </div>
                 <h4 className="text-sm font-black text-[var(--foreground)]">
                   {language === 'es' ? 'Conectando...' : 'Connecting...'}
                 </h4>
                 <p className="text-[10px] text-muted-foreground font-semibold mt-1">
-                  {language === 'es' 
-                    ? 'Redirigiendo de forma segura a Mercado Pago Checkout Pro' 
-                    : 'Redirecting securely to Mercado Pago Checkout Pro'}
+                  {activeGateway === 'paypal'
+                    ? (language === 'es' ? 'Preparando redirección segura a PayPal...' : 'Preparing secure redirection to PayPal...')
+                    : (language === 'es' ? 'Redirigiendo de forma segura a Mercado Pago Checkout Pro...' : 'Redirecting securely to Mercado Pago Checkout Pro...')}
                 </p>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* PayPal Confirmation Modal */}
+      {showConfirmModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-card border border-border rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#FFC439]" />
+            
+            <div className="space-y-6 text-center pt-2">
+              <div className="w-14 h-14 rounded-2xl bg-[#FFC439]/15 text-[#003087] flex items-center justify-center mx-auto shadow-xs border border-[#FFC439]/20">
+                <Heart className="w-8 h-8 fill-current text-[#003087] animate-pulse" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-lg font-black text-[var(--foreground)]">
+                  {language === 'es' ? '¿Completaste tu donación?' : 'Did you complete your donation?'}
+                </h3>
+                <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                  {language === 'es' 
+                    ? `Hemos abierto PayPal en una pestaña nueva para tu donación de $${payPalAmount.toFixed(2)} USD. Una vez confirmes el pago, haz clic en el botón de abajo para registrar tu aporte.` 
+                    : `We opened PayPal in a new tab for your donation of $${payPalAmount.toFixed(2)} USD. Once you complete the payment, click below to register your support.`}
+                </p>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleConfirmPayPalDonation}
+                  disabled={isConfirmingPayPal}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs py-3.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {isConfirmingPayPal ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>{language === 'es' ? 'Sí, he donado' : 'Yes, I have donated'}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={isConfirmingPayPal}
+                  className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground font-bold text-xs py-3.5 px-4 rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {language === 'es' ? 'Cancelar' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grand Success Celebration Modal */}
+      {showSuccessModal && (
+        <div 
+          className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-card border border-border rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300 text-center">
+            {/* Success confetti border top */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-green-500" />
+            
+            <div className="space-y-6 pt-2">
+              <div className="w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto shadow-xs border border-emerald-500/20 relative animate-bounce">
+                <Sparkles className="w-10 h-10 text-emerald-500" />
+                <Heart className="w-5 h-5 fill-current text-red-500 absolute -bottom-1 -right-1 animate-pulse" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-[var(--foreground)]">
+                  {language === 'es' ? '¡Muchísimas Gracias! ❤️' : 'Thank You So Much! ❤️'}
+                </h3>
+                <p className="text-xs text-muted-foreground font-semibold leading-relaxed">
+                  {language === 'es' 
+                    ? 'Tu donación ha sido registrada. Has contribuido a mantener FinControl activo y gratuito para todos. ¡Agradecemos inmensamente tu apoyo!' 
+                    : 'Your donation has been registered. You have contributed to keeping FinControl active and free for everyone. We immensely appreciate your support!'}
+                </p>
+              </div>
+
+              <div className="bg-muted/30 p-4 rounded-2xl border border-border/40 inline-block w-full">
+                <span className="text-xs font-bold text-muted-foreground uppercase block tracking-wider mb-1">
+                  {language === 'es' ? 'Tu Donación' : 'Your Donation'}
+                </span>
+                <span className="text-2xl font-black text-emerald-500">
+                  ${payPalAmount > 0 ? payPalAmount.toFixed(2) : '5.00'} USD
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-sm py-4 px-6 rounded-2xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>{language === 'es' ? 'De nada / Entendido' : 'You are welcome / Got it'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

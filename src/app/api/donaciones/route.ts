@@ -7,6 +7,7 @@ export async function POST(req: Request) {
     const user = await getCurrentUser(req);
     const body = await req.json();
     const amount = Number(body.amount);
+    const gateway = body.gateway || 'mercadopago';
 
     // Validate donation amount in backend (must be >= 1.00 USD)
     if (isNaN(amount) || amount < 1.00) {
@@ -14,6 +15,32 @@ export async function POST(req: Request) {
         { success: false, error: 'El monto mínimo de donación es 1 USD / Minimum donation amount is 1 USD' }, 
         { status: 400 }
       );
+    }
+
+    if (gateway === 'paypal') {
+      const paypalEmail = process.env.NEXT_PUBLIC_PAYPAL_EMAIL || 'pena92992@gmail.com';
+      const paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(paypalEmail)}&amount=${amount}&currency_code=USD&no_recurring=0`;
+      const preferenceId = `paypal_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+      // Record pending PayPal donation in database
+      if (hasSupabaseKeys) {
+        try {
+          const { error } = await supabase.from('donations').insert({
+            user_id: user?.userId || null,
+            amount: Number(amount.toFixed(2)),
+            currency: 'USD',
+            status: 'pending',
+            preference_id: preferenceId
+          });
+          if (error) {
+            console.error('Supabase write error when inserting pending PayPal donation:', error);
+          }
+        } catch (dbErr) {
+          console.error('Supabase DB connection failed for PayPal:', dbErr);
+        }
+      }
+
+      return NextResponse.json({ success: true, url: paypalUrl, preferenceId });
     }
 
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
@@ -103,5 +130,54 @@ export async function POST(req: Request) {
       { success: false, error: error.message || 'Internal Server Error' }, 
       { status: 500 }
     );
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    if (!hasSupabaseKeys) {
+      return NextResponse.json({ success: true, totalApprovedUSD: 0 });
+    }
+
+    // Get current calendar month start and end dates (UTC)
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
+    // Start of next month
+    const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
+
+    // Fetch approved donations for this month
+    const { data: donations, error } = await supabase
+      .from('donations')
+      .select('amount, currency')
+      .eq('status', 'approved')
+      .gte('created_at', startOfMonth.toISOString())
+      .lt('created_at', endOfMonth.toISOString());
+
+    if (error) {
+      console.error('Error fetching donations for progress:', error);
+      return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
+    }
+
+    const copExchangeRate = Number(process.env.COP_EXCHANGE_RATE) || 4000;
+    
+    let totalApprovedUSD = 0;
+    if (donations) {
+      for (const donation of donations) {
+        const amt = Number(donation.amount);
+        if (donation.currency === 'COP') {
+          totalApprovedUSD += amt / copExchangeRate;
+        } else {
+          totalApprovedUSD += amt;
+        }
+      }
+    }
+
+    // Round to 2 decimals
+    totalApprovedUSD = Number(totalApprovedUSD.toFixed(2));
+
+    return NextResponse.json({ success: true, totalApprovedUSD });
+  } catch (error: any) {
+    console.error('Error in GET /api/donaciones:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
