@@ -19,6 +19,7 @@ import {
   BarChart2, 
   User, 
   Settings, 
+  Heart,
   LogOut, 
   Bell, 
   Search, 
@@ -225,6 +226,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     { name: t.expenses, href: '/expenses', icon: ShoppingCart },
     { name: t.bills, href: '/invoices', icon: Receipt },
     { name: t.reports, href: '/reports', icon: BarChart2 },
+    { name: t.supportTitle || (language === 'es' ? 'Apóyanos' : 'Support Us'), href: '/donaciones', icon: Heart },
     { name: t.profile, href: '/profile', icon: User },
   ];
 

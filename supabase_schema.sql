@@ -155,4 +155,21 @@ CREATE TABLE IF NOT EXISTS public.savings_goals (
 ALTER TABLE public.savings_goals ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public operations on savings_goals" ON public.savings_goals FOR ALL USING (true) WITH CHECK (true);
 
+-- 4. Creación de la Tabla de Donaciones (donations)
+CREATE TABLE IF NOT EXISTS public.donations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  amount NUMERIC(12, 2) NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+  payment_id TEXT,
+  preference_id TEXT UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Habilitar RLS para donaciones
+ALTER TABLE public.donations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public operations on donations" ON public.donations FOR ALL USING (true) WITH CHECK (true);
+
 
