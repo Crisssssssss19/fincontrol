@@ -122,6 +122,32 @@ export default function MainLayout({ children }: MainLayoutProps) {
     };
   }, []);
 
+  // Intercept 401 responses to clear session and redirect to login
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      
+      if (response.status === 401) {
+        const urlStr = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url || '';
+        const isAuthAPI = urlStr.includes('/api/auth/') && !urlStr.includes('/api/auth/session');
+        
+        if (!isAuthAPI && !isPublicPage) {
+          console.warn('[Fetch Interceptor] Received 401 Unauthorized. Clearing session and redirecting.');
+          clearSession();
+          router.push('/auth/login');
+        }
+      }
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [clearSession, router, isPublicPage]);
+
   const handleLogout = () => {
     clearSession();
     router.push('/auth/login');
