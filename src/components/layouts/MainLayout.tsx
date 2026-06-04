@@ -9,6 +9,7 @@ import { useSyncStore } from '@/store/useSyncStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useSearchStore } from '@/store/useSearchStore';
 import { useAlertStore } from '@/store/useAlertStore';
+import { useThemeStore } from '@/store/useThemeStore';
 import { translations } from '@/lib/translations';
 import AlertModal from '@/components/ui/AlertModal';
 import { 
@@ -35,7 +36,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Percent
 } from 'lucide-react';
 
 interface MainLayoutProps {
@@ -69,6 +71,36 @@ export default function MainLayout({ children }: MainLayoutProps) {
   };
   
   const { user, clearSession } = useAuthStore();
+
+  // Register PWA Service Worker
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => console.log('[PWA] Service Worker registered successfully:', reg.scope))
+        .catch((err) => console.error('[PWA] Service Worker registration failed:', err));
+    }
+  }, []);
+
+  // Load full user profile to sync theme & custom settings from database
+  useEffect(() => {
+    if (!isMounted || !user) return;
+
+    async function syncProfileData() {
+      try {
+        const res = await fetch('/api/profile');
+        const data = await res.json();
+        if (data.success && data.profile) {
+          if (data.profile.visualSettings) {
+            useThemeStore.getState().initializeSettings(data.profile.visualSettings);
+          }
+        }
+      } catch (err) {
+        console.error('[MainLayout] Failed to load profile for theme sync:', err);
+      }
+    }
+    
+    syncProfileData();
+  }, [isMounted, user]);
 
   // Redirect to login if not authenticated on a protected page
   useEffect(() => {
@@ -267,6 +299,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     { name: t.expenses, href: '/expenses', icon: ShoppingCart },
     { name: t.bills, href: '/invoices', icon: Receipt },
     { name: t.reports, href: '/reports', icon: BarChart2 },
+    { name: language === 'es' ? 'Simulador' : 'Simulator', href: '/simulator', icon: Percent },
     { name: language === 'es' ? 'Asesor IA' : 'AI Advisor', href: '/advisor', icon: Sparkles },
     { name: t.supportTitle || (language === 'es' ? 'Apóyanos' : 'Support Us'), href: '/donaciones', icon: Heart },
     { name: t.profile, href: '/profile', icon: User },

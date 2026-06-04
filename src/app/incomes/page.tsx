@@ -15,7 +15,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  Download
+  Download,
+  X,
+  Tag
 } from 'lucide-react';
 import { Income } from '@/core/entities/Income';
 import { ExportService } from '@/utils/export';
@@ -24,6 +26,7 @@ import { useLanguageStore } from '@/store/useLanguageStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSearchStore } from '@/store/useSearchStore';
 import { useAlertStore } from '@/store/useAlertStore';
+import { useThemeStore } from '@/store/useThemeStore';
 import { translations } from '@/lib/translations';
 import { initOfflineDB } from '@/lib/offlineDb';
 import { formatCurrencyValue } from '@/utils/currency';
@@ -48,6 +51,74 @@ export default function IncomesPage() {
   const { user } = useAuthStore();
   const searchQuery = useSearchStore(state => state.searchQuery);
   const isSearching = useSearchStore(state => state.isSearching);
+
+  const { 
+    customIncomeCategories, 
+    addCustomIncomeCategory, 
+    customTags,
+    addCustomTag
+  } = useThemeStore();
+
+  const defaultCategories = ['Nómina', 'Freelance', 'Inversiones', 'Regalo', 'Otros'];
+  const allCategories = [...defaultCategories, ...customIncomeCategories];
+
+  // Custom Category State
+  const [showNewCatInput, setShowNewCatInput] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+
+  // Custom Tags State
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+
+  // Advanced Filters State
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('');
+  const [filterMinAmount, setFilterMinAmount] = useState<number | ''>('');
+  const [filterMaxAmount, setFilterMaxAmount] = useState<number | ''>('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterSelectedTags, setFilterSelectedTags] = useState<string[]>([]);
+
+  const parseDescriptionAndTags = (desc: string) => {
+    const hashtagRegex = /#(\w+)/g;
+    const tags: string[] = [];
+    let match;
+    while ((match = hashtagRegex.exec(desc || '')) !== null) {
+      tags.push(match[1].toLowerCase());
+    }
+    const cleanDesc = (desc || '').replace(hashtagRegex, '').trim();
+    return { cleanDesc, tags };
+  };
+
+  // Collect all tags present in the incomes list
+  const allAvailableTags = Array.from(
+    new Set(
+      incomes.flatMap(i => {
+        const { tags } = parseDescriptionAndTags(i.description);
+        return tags;
+      })
+    )
+  );
+
+  const hasActiveFilters = 
+    filterCategory !== '' ||
+    filterPaymentMethod !== '' ||
+    filterMinAmount !== '' ||
+    filterMaxAmount !== '' ||
+    filterStartDate !== '' ||
+    filterEndDate !== '' ||
+    filterSelectedTags.length > 0;
+
+  const resetFilters = () => {
+    setFilterCategory('');
+    setFilterPaymentMethod('');
+    setFilterMinAmount('');
+    setFilterMaxAmount('');
+    setFilterStartDate('');
+    setFilterEndDate('');
+    setFilterSelectedTags([]);
+  };
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<IncomeFormValues>({
     resolver: zodResolver(incomeSchema),
@@ -78,10 +149,15 @@ export default function IncomesPage() {
 
   const onSubmit = async (data: IncomeFormValues) => {
     const id = crypto.randomUUID();
+    
+    // Append tags to description
+    const tagsSuffix = selectedTags.map(t => `#${t}`).join(' ');
+    const finalDescription = data.description + (tagsSuffix ? ` ${tagsSuffix}` : '');
+
     const newIncome: Income = {
       id,
       userId: user?.id || 'a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6',
-      description: data.description,
+      description: finalDescription,
       amount: data.amount,
       category: data.category,
       date: data.date,
@@ -96,6 +172,7 @@ export default function IncomesPage() {
         // Instantly update UI locally
         setIncomes(prev => [newIncome, ...prev]);
         reset();
+        setSelectedTags([]);
         alert(t.noConnectionMsg);
       } catch (err) {
         console.error('Error saving pending income to IDB:', err);
@@ -112,6 +189,7 @@ export default function IncomesPage() {
         if (result.success) {
           setIncomes(prev => [result.income, ...prev]);
           reset();
+          setSelectedTags([]);
           alert(language === 'es' ? '¡Ingreso registrado con éxito!' : 'Income registered successfully!');
         }
       } catch (err) {
@@ -140,20 +218,37 @@ export default function IncomesPage() {
   };
 
   const filteredIncomes = incomes.filter(i => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const amountStr = `$${i.amount.toFixed(2)}`;
-    const categoryName = (i.category === 'Nómina' || i.category === 'Salary' ? t.nomina :
-                           i.category === 'Freelance' ? t.freelance :
-                           i.category === 'Inversiones' || i.category === 'Investments' ? t.inversiones :
-                           i.category === 'Regalo' || i.category === 'Gift' ? t.regalo : t.otros).toLowerCase();
+    const { cleanDesc, tags } = parseDescriptionAndTags(i.description);
 
-    return i.description.toLowerCase().includes(query) ||
-           i.category.toLowerCase().includes(query) ||
-           categoryName.includes(query) ||
-           i.date.toLowerCase().includes(query) ||
-           amountStr.includes(query) ||
-           i.amount.toString().includes(query);
+    // Search Query (Text Filter)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const amountStr = `$${i.amount.toFixed(2)}`;
+      const categoryName = (i.category === 'Nómina' || i.category === 'Salary' ? t.nomina :
+                             i.category === 'Freelance' ? t.freelance :
+                             i.category === 'Inversiones' || i.category === 'Investments' ? t.inversiones :
+                             i.category === 'Regalo' || i.category === 'Gift' ? t.regalo : t.otros).toLowerCase();
+
+      const matchSearch = cleanDesc.toLowerCase().includes(query) ||
+                          i.category.toLowerCase().includes(query) ||
+                          categoryName.includes(query) ||
+                          i.date.toLowerCase().includes(query) ||
+                          amountStr.includes(query) ||
+                          i.amount.toString().includes(query) ||
+                          tags.some(t => t.includes(query));
+      if (!matchSearch) return false;
+    }
+
+    // Advanced Filters
+    if (filterCategory && i.category !== filterCategory) return false;
+    if (filterPaymentMethod && i.paymentMethod !== filterPaymentMethod) return false;
+    if (filterMinAmount !== '' && i.amount < filterMinAmount) return false;
+    if (filterMaxAmount !== '' && i.amount > filterMaxAmount) return false;
+    if (filterStartDate && i.date < filterStartDate) return false;
+    if (filterEndDate && i.date > filterEndDate) return false;
+    if (filterSelectedTags.length > 0 && !filterSelectedTags.every(t => tags.includes(t))) return false;
+
+    return true;
   });
 
   const handleExportPDF = () => {
@@ -238,7 +333,6 @@ export default function IncomesPage() {
               )}
             </div>
           </div>
-
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-muted-foreground">{t.descripcion}</label>
@@ -253,16 +347,53 @@ export default function IncomesPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-muted-foreground">{t.categoria}</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-muted-foreground">{t.categoria}</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCatInput(!showNewCatInput)}
+                    className="text-xs font-bold text-[var(--primary)] hover:underline flex items-center gap-0.5"
+                  >
+                    <Plus className="w-3 h-3" /> {language === 'es' ? 'Nueva' : 'New'}
+                  </button>
+                </div>
+                {showNewCatInput && (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      placeholder={language === 'es' ? 'Nombre' : 'Name'}
+                      className="flex-1 min-w-0 px-2 py-1 bg-muted/30 border border-border rounded-lg outline-none text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newCatName.trim()) {
+                          addCustomIncomeCategory(newCatName.trim());
+                          setNewCatName('');
+                          setShowNewCatInput(false);
+                        }
+                      }}
+                      className="px-2 py-1 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg text-xs font-bold hover:opacity-90"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
                 <select 
                   {...register('category')}
                   className="w-full px-4 py-2.5 bg-muted/30 border border-border rounded-xl focus:ring-2 focus:ring-[var(--primary)] outline-none text-sm transition-all cursor-pointer"
                 >
-                  <option value="Nómina">{t.nomina}</option>
-                  <option value="Freelance">{t.freelance}</option>
-                  <option value="Inversiones">{t.inversiones}</option>
-                  <option value="Regalo">{t.regalo}</option>
-                  <option value="Otros">{t.otros}</option>
+                  {allCategories.map(cat => {
+                    let label = cat;
+                    if (cat === 'Nómina') label = t.nomina;
+                    else if (cat === 'Freelance') label = t.freelance;
+                    else if (cat === 'Inversiones') label = t.inversiones;
+                    else if (cat === 'Regalo') label = t.regalo;
+                    else if (cat === 'Otros') label = t.otros;
+                    return <option key={cat} value={cat}>{label}</option>;
+                  })}
                 </select>
               </div>
               
@@ -304,6 +435,60 @@ export default function IncomesPage() {
               </select>
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground">{language === 'es' ? 'Etiquetas (#tags)' : 'Tags (#tags)'}</label>
+              <div className="flex gap-2">
+                <input 
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault();
+                      const val = tagInput.trim().replace(/^#/, '');
+                      if (val && !selectedTags.includes(val)) {
+                        setSelectedTags([...selectedTags, val]);
+                        addCustomTag(val);
+                      }
+                      setTagInput('');
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-muted/30 border border-border rounded-xl focus:ring-2 focus:ring-[var(--primary)] outline-none text-sm transition-all" 
+                  placeholder={language === 'es' ? 'Enter o coma para añadir' : 'Enter or comma to add'} 
+                  type="text"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = tagInput.trim().replace(/^#/, '');
+                    if (val && !selectedTags.includes(val)) {
+                      setSelectedTags([...selectedTags, val]);
+                      addCustomTag(val);
+                    }
+                    setTagInput('');
+                  }}
+                  className="px-4 py-2.5 bg-muted hover:bg-muted-foreground/10 text-muted-foreground rounded-xl text-xs font-bold transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              {selectedTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedTags.map(tag => (
+                    <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-[var(--primary)]/10 text-[var(--primary)] text-[10px] font-bold rounded-full">
+                      #{tag}
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedTags(selectedTags.filter(t => t !== tag))}
+                        className="hover:bg-[var(--primary)]/20 rounded-full p-0.5"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button 
               type="submit"
               className="w-full mt-4 bg-[var(--primary)] text-[var(--primary-foreground)] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-95 transition-all active:scale-[0.98]"
@@ -322,6 +507,17 @@ export default function IncomesPage() {
             </div>
             <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 shrink-0">
               <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  showFilters || hasActiveFilters
+                    ? 'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20' 
+                    : 'bg-muted hover:bg-muted-foreground/10 text-muted-foreground'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" /> {language === 'es' ? 'Filtros' : 'Filters'}
+                {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]"></span>}
+              </button>
+              <button 
                 onClick={handleExportPDF}
                 className="flex items-center gap-1.5 px-4 py-2 bg-muted hover:bg-muted-foreground/10 text-muted-foreground rounded-full text-xs font-bold transition-all cursor-pointer"
               >
@@ -335,6 +531,142 @@ export default function IncomesPage() {
               </button>
             </div>
           </div>
+
+          {/* Collapsible Filters Panel */}
+          {showFilters && (
+            <div className="p-5 border border-border/80 rounded-2xl bg-muted/10 space-y-4 animate-in slide-in-from-top duration-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5 text-[var(--primary)]" />
+                  {language === 'es' ? 'Filtros de búsqueda avanzados' : 'Advanced search filters'}
+                </h3>
+                {hasActiveFilters && (
+                  <button 
+                    onClick={resetFilters}
+                    className="text-[10px] font-bold text-error hover:underline"
+                  >
+                    {language === 'es' ? 'Limpiar Filtros' : 'Clear Filters'}
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Category Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{t.categoria}</label>
+                  <select 
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-medium cursor-pointer"
+                  >
+                    <option value="">{language === 'es' ? 'Todas' : 'All'}</option>
+                    {allCategories.map(cat => {
+                      let label = cat;
+                      if (cat === 'Nómina') label = t.nomina;
+                      else if (cat === 'Freelance') label = t.freelance;
+                      else if (cat === 'Inversiones') label = t.inversiones;
+                      else if (cat === 'Regalo') label = t.regalo;
+                      else if (cat === 'Otros') label = t.otros;
+                      return <option key={cat} value={cat}>{label}</option>;
+                    })}
+                  </select>
+                </div>
+
+                {/* Payment Method Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{t.metodoPago}</label>
+                  <select 
+                    value={filterPaymentMethod}
+                    onChange={(e) => setFilterPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-medium cursor-pointer"
+                  >
+                    <option value="">{language === 'es' ? 'Todos' : 'All'}</option>
+                    <option value="Transferencia">{t.transferencia}</option>
+                    <option value="Efectivo">{t.efectivo}</option>
+                    <option value="Tarjeta">{t.tarjeta}</option>
+                    <option value="PayPal">{t.paypal}</option>
+                  </select>
+                </div>
+
+                {/* Tags Filter */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'es' ? 'Filtrar por Etiquetas' : 'Filter by Tags'}</label>
+                  <div className="flex flex-wrap gap-1 max-h-[70px] overflow-y-auto p-1 bg-card border border-border rounded-xl">
+                    {allAvailableTags.length > 0 ? (
+                      allAvailableTags.map(tag => {
+                        const isSelected = filterSelectedTags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setFilterSelectedTags(filterSelectedTags.filter(t => t !== tag));
+                              } else {
+                                setFilterSelectedTags([...filterSelectedTags, tag]);
+                              }
+                            }}
+                            className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${
+                              isSelected 
+                                ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' 
+                                : 'bg-muted text-muted-foreground hover:bg-muted-foreground/10'
+                            }`}
+                          >
+                            #{tag}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-medium p-1">
+                        {language === 'es' ? 'No hay etiquetas disponibles' : 'No tags available'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Amount Range Filter */}
+                <div className="space-y-1 md:col-span-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'es' ? 'Rango de Importe' : 'Amount Range'}</label>
+                  <div className="flex gap-2">
+                    <input 
+                      value={filterMinAmount}
+                      onChange={(e) => setFilterMinAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder={language === 'es' ? 'Mín' : 'Min'}
+                      type="number"
+                      className="w-1/2 px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-semibold"
+                    />
+                    <input 
+                      value={filterMaxAmount}
+                      onChange={(e) => setFilterMaxAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder={language === 'es' ? 'Máx' : 'Max'}
+                      type="number"
+                      className="w-1/2 px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'es' ? 'Rango de Fechas' : 'Date Range'}</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                      type="date"
+                      className="w-full px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-medium"
+                    />
+                    <span className="text-muted-foreground text-xs font-bold">-</span>
+                    <input 
+                      value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                      type="date"
+                      className="w-full px-3 py-2 bg-card border border-border rounded-xl outline-none text-xs font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -358,34 +690,49 @@ export default function IncomesPage() {
                     </td>
                   </tr>
                 ) : filteredIncomes.length > 0 ? (
-                  filteredIncomes.map((i) => (
-                    <tr key={i.id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="py-4 text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {i.date}
-                      </td>
-                      <td className="py-4 font-bold text-sm text-[var(--foreground)]">{i.description}</td>
-                      <td className="py-4">
-                        <span className="px-2.5 py-0.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-full text-xs font-bold">
-                          {i.category === 'Nómina' || i.category === 'Salary' ? t.nomina :
-                           i.category === 'Freelance' ? t.freelance :
-                           i.category === 'Inversiones' || i.category === 'Investments' ? t.inversiones :
-                           i.category === 'Regalo' || i.category === 'Gift' ? t.regalo : t.otros}
-                        </span>
-                      </td>
-                      <td className="py-4 text-right font-black text-[var(--primary)] text-sm">
-                        +{formatCurrencyValue(i.amount, user?.currency || 'EUR', language)}
-                      </td>
-                      <td className="py-4 text-right w-10">
-                        <button 
-                          onClick={() => deleteIncome(i.id)}
-                          className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredIncomes.map((i) => {
+                    const { cleanDesc, tags } = parseDescriptionAndTags(i.description);
+                    return (
+                      <tr key={i.id} className="hover:bg-muted/30 transition-colors group">
+                        <td className="py-4 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {i.date}
+                        </td>
+                        <td className="py-4">
+                          <div className="font-bold text-sm text-[var(--foreground)]">{cleanDesc}</div>
+                          {tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {tags.map(tag => (
+                                <span key={tag} className="px-1.5 py-0.5 bg-muted text-[9px] font-bold text-muted-foreground rounded-md flex items-center gap-0.5">
+                                  <Tag className="w-2.5 h-2.5 text-[var(--primary)]" /> {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2.5 py-0.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-full text-xs font-bold">
+                            {i.category === 'Nómina' || i.category === 'Salary' ? t.nomina :
+                             i.category === 'Freelance' ? t.freelance :
+                             i.category === 'Inversiones' || i.category === 'Investments' ? t.inversiones :
+                             i.category === 'Regalo' || i.category === 'Gift' ? t.regalo : 
+                             allCategories.includes(i.category) ? i.category : t.otros}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right font-black text-[var(--primary)] text-sm">
+                          +{formatCurrencyValue(i.amount, user?.currency || 'EUR', language)}
+                        </td>
+                        <td className="py-4 text-right w-10">
+                          <button 
+                            onClick={() => deleteIncome(i.id)}
+                            className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground font-medium">

@@ -28,6 +28,9 @@ interface VisualSettings {
   dashboardLayout: WidgetLayout[];
   expenseAlerts: boolean;
   weeklySummary: boolean;
+  customCategories: string[];
+  customIncomeCategories: string[];
+  customTags: string[];
   setTheme: (t: FinanceTheme) => void;
   setAccentColor: (a: AccentColor) => void;
   setFont: (f: PrimaryFont) => void;
@@ -38,6 +41,13 @@ interface VisualSettings {
   setDashboardLayout: (layout: WidgetLayout[]) => void;
   setExpenseAlerts: (enabled: boolean) => void;
   setWeeklySummary: (enabled: boolean) => void;
+  addCustomCategory: (cat: string) => void;
+  deleteCustomCategory: (cat: string) => void;
+  addCustomIncomeCategory: (cat: string) => void;
+  deleteCustomIncomeCategory: (cat: string) => void;
+  addCustomTag: (tag: string) => void;
+  deleteCustomTag: (tag: string) => void;
+  initializeSettings: (settings: any) => void;
 }
 
 const defaultLayout: WidgetLayout[] = [
@@ -80,6 +90,9 @@ async function syncSettings(state: any) {
           dashboardLayout: state.dashboardLayout,
           expenseAlerts: state.expenseAlerts,
           weeklySummary: state.weeklySummary,
+          customCategories: state.customCategories,
+          customIncomeCategories: state.customIncomeCategories,
+          customTags: state.customTags,
         }),
       });
     } catch (err) {
@@ -99,9 +112,11 @@ export const useThemeStore = create<VisualSettings>()(
       animations: true,
       animationSpeed: 'normal',
       dashboardLayout: defaultLayout,
-      
       expenseAlerts: true,
       weeklySummary: true,
+      customCategories: [],
+      customIncomeCategories: [],
+      customTags: [],
       
       setTheme: (theme) => set((state) => {
         const next = { ...state, theme };
@@ -152,6 +167,65 @@ export const useThemeStore = create<VisualSettings>()(
         const next = { ...state, weeklySummary };
         syncSettings(next);
         return { weeklySummary };
+      }),
+      addCustomCategory: (category) => set((state) => {
+        if (state.customCategories.includes(category)) return {};
+        const customCategories = [...state.customCategories, category];
+        const next = { ...state, customCategories };
+        syncSettings(next);
+        return { customCategories };
+      }),
+      deleteCustomCategory: (category) => set((state) => {
+        const customCategories = state.customCategories.filter(c => c !== category);
+        const next = { ...state, customCategories };
+        syncSettings(next);
+        return { customCategories };
+      }),
+      addCustomIncomeCategory: (category) => set((state) => {
+        if (state.customIncomeCategories.includes(category)) return {};
+        const customIncomeCategories = [...state.customIncomeCategories, category];
+        const next = { ...state, customIncomeCategories };
+        syncSettings(next);
+        return { customIncomeCategories };
+      }),
+      deleteCustomIncomeCategory: (category) => set((state) => {
+        const customIncomeCategories = state.customIncomeCategories.filter(c => c !== category);
+        const next = { ...state, customIncomeCategories };
+        syncSettings(next);
+        return { customIncomeCategories };
+      }),
+      addCustomTag: (tag) => set((state) => {
+        const cleanTag = tag.trim().replace(/^#/, '').toLowerCase();
+        if (!cleanTag || state.customTags.includes(cleanTag)) return {};
+        const customTags = [...state.customTags, cleanTag];
+        const next = { ...state, customTags };
+        syncSettings(next);
+        return { customTags };
+      }),
+      deleteCustomTag: (tag) => set((state) => {
+        const cleanTag = tag.trim().replace(/^#/, '').toLowerCase();
+        const customTags = state.customTags.filter(t => t !== cleanTag);
+        const next = { ...state, customTags };
+        syncSettings(next);
+        return { customTags };
+      }),
+      initializeSettings: (settings) => set((state) => {
+        if (!settings) return {};
+        return {
+          theme: settings.theme || state.theme,
+          accentColor: settings.accentColor || state.accentColor,
+          font: settings.font || state.font,
+          borderRadius: settings.borderRadius || state.borderRadius,
+          density: settings.density || state.density,
+          animations: settings.animations !== undefined ? settings.animations : state.animations,
+          animationSpeed: settings.animationSpeed || state.animationSpeed,
+          dashboardLayout: settings.dashboardLayout || state.dashboardLayout,
+          expenseAlerts: settings.expenseAlerts !== undefined ? settings.expenseAlerts : state.expenseAlerts,
+          weeklySummary: settings.weeklySummary !== undefined ? settings.weeklySummary : state.weeklySummary,
+          customCategories: settings.customCategories || state.customCategories,
+          customIncomeCategories: settings.customIncomeCategories || state.customIncomeCategories,
+          customTags: settings.customTags || state.customTags,
+        };
       }),
     }),
     {

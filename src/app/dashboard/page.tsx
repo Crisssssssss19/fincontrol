@@ -28,7 +28,11 @@ import {
   Calendar,
   DollarSign,
   Info,
-  Trash2
+  Trash2,
+  Compass,
+  Shield,
+  Laptop,
+  GraduationCap
 } from 'lucide-react';
 import { Income } from '@/core/entities/Income';
 import { Expense } from '@/core/entities/Expense';
@@ -85,6 +89,55 @@ export default function DashboardPage() {
   const [goalTarget, setGoalTarget] = useState<number | ''>('');
   const [goalDate, setGoalDate] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
+  const [goalPreset, setGoalPreset] = useState('general');
+  const [goalCustomUrl, setGoalCustomUrl] = useState('');
+
+  const getPresetStyles = (preset: string) => {
+    switch (preset) {
+      case 'travel':
+        return {
+          gradient: 'bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600',
+          icon: Compass,
+          iconColor: 'text-cyan-100',
+        };
+      case 'car':
+        return {
+          gradient: 'bg-gradient-to-br from-rose-500 via-pink-500 to-orange-600',
+          icon: Car,
+          iconColor: 'text-rose-100',
+        };
+      case 'house':
+        return {
+          gradient: 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-600',
+          icon: Home,
+          iconColor: 'text-indigo-100',
+        };
+      case 'tech':
+        return {
+          gradient: 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950',
+          icon: Laptop,
+          iconColor: 'text-slate-200',
+        };
+      case 'education':
+        return {
+          gradient: 'bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-600',
+          icon: GraduationCap,
+          iconColor: 'text-violet-100',
+        };
+      case 'emergency':
+        return {
+          gradient: 'bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-800',
+          icon: Shield,
+          iconColor: 'text-emerald-100',
+        };
+      default:
+        return {
+          gradient: 'bg-gradient-to-br from-teal-500 via-emerald-500 to-teal-600',
+          icon: PiggyBank,
+          iconColor: 'text-teal-100',
+        };
+    }
+  };
 
   // Deposit form states
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
@@ -234,11 +287,15 @@ export default function DashboardPage() {
     if (!goalName || !goalTarget || !goalDate) return;
     try {
       setSavingGoal(true);
+      const finalName = goalPreset === 'custom' && goalCustomUrl 
+        ? `${goalName.trim()}||${goalCustomUrl.trim()}`
+        : `${goalName.trim()}||${goalPreset}`;
+
       const res = await fetch('/api/savings-goals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: goalName,
+          name: finalName,
           targetAmount: Number(goalTarget),
           targetDate: goalDate,
           currentAmount: 0
@@ -250,6 +307,8 @@ export default function DashboardPage() {
         setGoalName('');
         setGoalTarget('');
         setGoalDate('');
+        setGoalPreset('general');
+        setGoalCustomUrl('');
         setShowGoalForm(false);
         alert(language === 'es' ? '¡Meta de ahorro creada con éxito!' : 'Savings goal created successfully!');
       }
@@ -763,6 +822,41 @@ export default function DashboardPage() {
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'es' ? 'Estilo / Icono' : 'Style / Icon'}</label>
+                  <select
+                    value={goalPreset}
+                    onChange={(e) => setGoalPreset(e.target.value)}
+                    className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:ring-1 focus:ring-[var(--primary)] cursor-pointer"
+                  >
+                    <option value="general">🐖 {language === 'es' ? 'General (Hucha)' : 'General (Piggy Bank)'}</option>
+                    <option value="travel">✈️ {language === 'es' ? 'Viajes (Brújula)' : 'Travel (Compass)'}</option>
+                    <option value="car">🚗 {language === 'es' ? 'Coche' : 'Car'}</option>
+                    <option value="house">🏠 {language === 'es' ? 'Vivienda' : 'House'}</option>
+                    <option value="tech">💻 {language === 'es' ? 'Tecnología' : 'Tech'}</option>
+                    <option value="education">🎓 {language === 'es' ? 'Educación' : 'Education'}</option>
+                    <option value="emergency">🛡️ {language === 'es' ? 'Emergencias (Escudo)' : 'Emergency (Shield)'}</option>
+                    <option value="custom">🖼️ {language === 'es' ? 'Imagen Personalizada (URL)' : 'Custom Image (URL)'}</option>
+                  </select>
+                </div>
+
+                {goalPreset === 'custom' && (
+                  <div className="space-y-1 animate-in fade-in duration-200">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'es' ? 'URL de la Imagen' : 'Image URL'}</label>
+                    <input
+                      type="url"
+                      value={goalCustomUrl}
+                      onChange={(e) => setGoalCustomUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2">
                 <button 
                   type="submit" 
@@ -776,7 +870,7 @@ export default function DashboardPage() {
           )}
 
           {/* Savings Goals Listings */}
-          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+          <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
             {goals.length > 0 ? (
               goals.map((g) => {
                 const pct = g.targetAmount > 0 ? Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100)) : 0;
@@ -791,83 +885,183 @@ export default function DashboardPage() {
 
                 const isDepositingThisGoal = selectedGoalId === g.id;
 
-                return (
-                  <div key={g.id} className="p-4 bg-muted/10 border border-border/60 rounded-xl space-y-3 relative group">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center">
-                          <PiggyBank className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-[var(--foreground)]">{g.name}</h4>
-                          <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3 h-3" />
-                            {language === 'es' ? `Límite: ${g.targetDate} (${daysRemaining} días restantes)` : `Due: ${g.targetDate} (${daysRemaining} days left)`}
-                          </span>
-                        </div>
-                      </div>
+                const nameParts = g.name.split('||');
+                const displayName = nameParts[0];
+                const presetOrUrl = nameParts[1] || 'general';
+                const isCustomUrl = presetOrUrl.startsWith('http') || presetOrUrl.includes('/') || presetOrUrl.includes('.');
+                const styles = getPresetStyles(presetOrUrl);
+                const IconComp = styles.icon;
+
+                if (isCustomUrl) {
+                  return (
+                    <div 
+                      key={g.id} 
+                      className="p-5 border border-border/60 rounded-2xl relative overflow-hidden group shadow-md transition-all hover:scale-[1.01] hover:shadow-lg min-h-[160px] flex flex-col justify-between text-white animate-in fade-in duration-200"
+                      style={{ backgroundImage: `url(${presetOrUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                    >
+                      {/* Glass backdrop overlay */}
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs z-0 transition-opacity group-hover:opacity-70 duration-300"></div>
                       
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            if (isDepositingThisGoal) {
-                              setSelectedGoalId(null);
-                            } else {
-                              setSelectedGoalId(g.id);
-                            }
-                          }}
-                          className="px-3 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded-lg text-[10px] font-black hover:bg-[var(--primary)] hover:text-white transition-all cursor-pointer"
-                        >
-                          {isDepositingThisGoal ? t.cancelar : (language === 'es' ? '+ ABONAR' : '+ DEPOSIT')}
-                        </button>
-                        
-                        <button
-                          onClick={() => handleDeleteGoal(g.id)}
-                          className="p-1 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
-                          title="Eliminar Meta / Delete Goal"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="relative z-10 flex flex-col justify-between h-full w-full flex-1 space-y-4">
+                        {/* Top Header */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center backdrop-blur-xs border border-white/20 shadow-sm">
+                              <Target className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-extrabold tracking-tight drop-shadow-sm">{displayName}</h4>
+                              <span className="text-[9px] text-white/80 font-bold flex items-center gap-1 mt-0.5 drop-shadow-xs">
+                                <Calendar className="w-3 h-3 text-white/95" />
+                                {language === 'es' ? `Límite: ${g.targetDate} (${daysRemaining} días)` : `Due: ${g.targetDate} (${daysRemaining} days)`}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedGoalId(isDepositingThisGoal ? null : g.id)}
+                              className="px-3 py-1.5 bg-white/20 hover:bg-white/35 text-white rounded-lg text-[10px] font-black tracking-wider transition-all backdrop-blur-xs border border-white/10"
+                            >
+                              {isDepositingThisGoal ? t.cancelar : (language === 'es' ? '+ ABONAR' : '+ DEPOSIT')}
+                            </button>
+                            
+                            <button
+                              onClick={() => handleDeleteGoal(g.id)}
+                              className="p-1.5 text-white/70 hover:text-red-300 hover:bg-white/15 rounded-lg transition-colors"
+                              title="Eliminar Meta / Delete Goal"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Deposit Form Area */}
+                        {isDepositingThisGoal && (
+                          <form onSubmit={handleGoalDeposit} className="flex gap-2 p-2 bg-black/40 border border-white/10 rounded-xl animate-in slide-in-from-top-2 duration-150 relative z-20">
+                            <div className="relative flex-1">
+                              <DollarSign className="w-3.5 h-3.5 text-white/80 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="number"
+                                value={depositAmount}
+                                onChange={(e) => setDepositAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full pl-7 pr-3 py-1 bg-white/10 border border-white/15 rounded-lg text-xs outline-none focus:ring-1 focus:ring-white text-white placeholder-white/50 font-semibold"
+                                placeholder={language === 'es' ? 'Importe' : 'Amount'}
+                                min={1}
+                                required
+                              />
+                            </div>
+                            <button 
+                              type="submit" 
+                              className="px-4 py-1 bg-white text-black rounded-lg text-xs font-black hover:bg-white/90 transition-all"
+                            >
+                              {language === 'es' ? 'Abonar' : 'Deposit'}
+                            </button>
+                          </form>
+                        )}
+
+                        {/* Progress Area */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-bold text-white/95">
+                            <span>{pct}% {language === 'es' ? 'completado' : 'completed'}</span>
+                            <span className="font-extrabold">
+                              {formatCurrencyValue(Number(g.currentAmount), user?.currency || 'EUR', language)} <span className="text-[10px] text-white/70 font-bold">/ {formatCurrencyValue(Number(g.targetAmount), user?.currency || 'EUR', language)}</span>
+                            </span>
+                          </div>
+                          <div className="w-full bg-white/20 rounded-full h-2.5 overflow-hidden border border-white/5">
+                            <div 
+                              className="h-full bg-white rounded-full transition-all duration-500 shadow-sm"
+                              style={{ width: `${pct}%` }}
+                            ></div>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  );
+                }
 
-                    {/* Deposit Form Area */}
-                    {isDepositingThisGoal && (
-                      <form onSubmit={handleGoalDeposit} className="flex gap-2 p-2.5 bg-card border border-border/80 rounded-xl animate-in slide-in-from-top-2 duration-150">
-                        <div className="relative flex-1">
-                          <DollarSign className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="number"
-                            value={depositAmount}
-                            onChange={(e) => setDepositAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full pl-7 pr-3 py-1 bg-muted/30 border border-border rounded-lg text-xs outline-none focus:ring-1 focus:ring-[var(--primary)] font-semibold"
-                            placeholder={language === 'es' ? 'Monto a depositar' : 'Amount to deposit'}
-                            min={1}
-                            required
-                          />
+                return (
+                  <div 
+                    key={g.id} 
+                    className={`p-5 rounded-2xl relative overflow-hidden group shadow-md transition-all hover:scale-[1.01] hover:shadow-lg min-h-[160px] flex flex-col justify-between text-white animate-in fade-in duration-200 ${styles.gradient}`}
+                  >
+                    {/* Large Translucent background icon */}
+                    <div className="absolute -right-6 -bottom-6 opacity-15 group-hover:scale-110 transition-all duration-300 pointer-events-none z-0">
+                      <IconComp className="w-36 h-36" />
+                    </div>
+
+                    <div className="relative z-10 flex flex-col justify-between h-full w-full flex-1 space-y-4">
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center backdrop-blur-xs border border-white/20 shadow-sm">
+                            <IconComp className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold tracking-tight">{displayName}</h4>
+                            <span className="text-[9px] text-white/80 font-bold flex items-center gap-1 mt-0.5">
+                              <Calendar className="w-3.5 h-3.5 text-white/95" />
+                              {language === 'es' ? `Límite: ${g.targetDate} (${daysRemaining} días)` : `Due: ${g.targetDate} (${daysRemaining} days)`}
+                            </span>
+                          </div>
                         </div>
-                        <button 
-                          type="submit" 
-                          className="px-4 py-1 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg text-xs font-bold hover:opacity-95 transition-all shadow-xs cursor-pointer font-semibold"
-                        >
-                          {language === 'es' ? 'Abonar' : 'Deposit'}
-                        </button>
-                      </form>
-                    )}
-
-                    {/* Progress indicators */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-bold text-muted-foreground">
-                        <span>{pct}% {language === 'es' ? 'completado' : 'completed'}</span>
-                        <span className="text-[var(--foreground)] font-extrabold">
-                          {formatCurrencyValue(Number(g.currentAmount), user?.currency || 'EUR', language)} <span className="text-[10px] text-muted-foreground font-bold">/ {formatCurrencyValue(Number(g.targetAmount), user?.currency || 'EUR', language)}</span>
-                        </span>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedGoalId(isDepositingThisGoal ? null : g.id)}
+                            className="px-3 py-1.5 bg-white/20 hover:bg-white/35 text-white rounded-lg text-[10px] font-black tracking-wider transition-all backdrop-blur-xs border border-white/10"
+                          >
+                            {isDepositingThisGoal ? t.cancelar : (language === 'es' ? '+ ABONAR' : '+ DEPOSIT')}
+                          </button>
+                          
+                          <button
+                            onClick={() => handleDeleteGoal(g.id)}
+                            className="p-1.5 text-white/70 hover:text-red-300 hover:bg-white/15 rounded-lg transition-colors"
+                            title="Eliminar Meta / Delete Goal"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden border border-border/10">
-                        <div 
-                          className="h-full bg-[var(--primary)] rounded-full transition-all duration-500 shadow-sm"
-                          style={{ width: `${pct}%` }}
-                        ></div>
+
+                      {/* Deposit Form Area */}
+                      {isDepositingThisGoal && (
+                        <form onSubmit={handleGoalDeposit} className="flex gap-2 p-2 bg-black/20 border border-white/10 rounded-xl animate-in slide-in-from-top-2 duration-150 relative z-20">
+                          <div className="relative flex-1">
+                            <DollarSign className="w-3.5 h-3.5 text-white/80 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="number"
+                              value={depositAmount}
+                              onChange={(e) => setDepositAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full pl-7 pr-3 py-1 bg-white/10 border border-white/15 rounded-lg text-xs outline-none focus:ring-1 focus:ring-white text-white placeholder-white/50 font-semibold"
+                              placeholder={language === 'es' ? 'Importe' : 'Amount'}
+                              min={1}
+                              required
+                            />
+                          </div>
+                          <button 
+                            type="submit" 
+                            className="px-4 py-1 bg-white text-black rounded-lg text-xs font-black hover:bg-white/90 transition-all"
+                          >
+                            {language === 'es' ? 'Abonar' : 'Deposit'}
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Progress Area */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold text-white/95">
+                          <span>{pct}% {language === 'es' ? 'completado' : 'completed'}</span>
+                          <span className="font-extrabold">
+                            {formatCurrencyValue(Number(g.currentAmount), user?.currency || 'EUR', language)} <span className="text-[10px] text-white/70 font-bold">/ {formatCurrencyValue(Number(g.targetAmount), user?.currency || 'EUR', language)}</span>
+                          </span>
+                        </div>
+                        <div className="w-full bg-white/20 rounded-full h-2.5 overflow-hidden border border-white/5">
+                          <div 
+                            className="h-full bg-white rounded-full transition-all duration-500 shadow-sm"
+                            style={{ width: `${pct}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
                   </div>
