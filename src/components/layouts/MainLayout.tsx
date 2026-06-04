@@ -450,7 +450,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
           </div>
 
           {/* Avatar + Username integrated, Premium Member text removed as requested */}
-          <div className="flex items-center gap-3 min-w-0">
+          {/* Mobile menu trigger (first) + Avatar & Username (second) */}
+          <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+            <button 
+              className="lg:hidden p-2 -ml-2 text-muted-foreground hover:bg-muted rounded-full transition-colors shrink-0"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              title={mobileMenuOpen ? (language === 'es' ? 'Cerrar menú' : 'Close menu') : (language === 'es' ? 'Abrir menú' : 'Open menu')}
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+
             <div className="w-9 h-9 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center font-bold text-sm overflow-hidden border border-border shrink-0">
               {user?.avatarUrl ? (
                 <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -575,13 +584,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
               )}
             </div>
 
-            {/* Mobile menu trigger */}
-            <button 
-              className="lg:hidden p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            {/* Profile Button on the right */}
+            <Link 
+              href="/profile"
+              className="lg:hidden p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors shrink-0"
+              title={t.profile}
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+              <User className="w-6 h-6" />
+            </Link>
           </div>
         </header>
 
@@ -656,23 +666,29 @@ export default function MainLayout({ children }: MainLayoutProps) {
       </main>
 
       {/* 3. MOBILE BOTTOM NAVBAR */}
-      <nav className="lg:hidden fixed bottom-0 left-0 w-full h-[68px] z-50 flex justify-around items-center px-6 bg-card border-t border-border shadow-lg">
-        {navigationItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
-          return (
-            <Link 
-              key={item.name} 
-              href={item.href} 
-              className={`flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform ${
-                isActive ? 'text-[var(--primary)] font-bold' : 'text-muted-foreground'
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">{item.name}</span>
-            </Link>
-          );
-        })}
+      <nav className="lg:hidden fixed bottom-0 left-0 w-full h-[58px] z-50 flex justify-around items-center px-4 bg-card/90 backdrop-blur-md border-t border-border shadow-lg pb-safe">
+        {navigationItems
+          .filter((item) => item.href !== '/profile')
+          .map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href} 
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex flex-col items-center justify-center flex-1 h-full relative py-1.5 active:scale-95 transition-all ${
+                  isActive ? 'text-[var(--primary)]' : 'text-muted-foreground hover:text-[var(--foreground)]'
+                }`}
+                title={item.name}
+              >
+                <Icon className={`w-[22px] h-[22px] transition-transform duration-200 ${isActive ? 'scale-110 text-[var(--primary)]' : ''}`} />
+                {isActive && (
+                  <span className="absolute bottom-1.5 w-1 h-1 rounded-full bg-[var(--primary)] animate-pulse" />
+                )}
+              </Link>
+            );
+          })}
       </nav>
 
       {/* Premium Global Alert Modal */}
