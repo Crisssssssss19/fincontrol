@@ -1165,11 +1165,11 @@ export default function InvoicesPage() {
                   return (
                     <div 
                       key={inv.id}
-                      className={`p-3 bg-muted/20 border rounded-xl flex items-center justify-between gap-4 transition-colors hover:bg-muted/30 ${
+                      className={`p-3 bg-muted/20 border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors hover:bg-muted/30 ${
                         resolvedStatus === 'overdue' ? 'border-rose-500/20 bg-rose-500/[0.01]' : 'border-border/60'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                           resolvedStatus === 'overdue' 
                             ? 'bg-rose-500/10 text-rose-500' 
@@ -1177,9 +1177,9 @@ export default function InvoicesPage() {
                         }`}>
                           {getCategoryIcon(inv.type)}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="font-bold text-xs text-[var(--foreground)] truncate leading-tight">{inv.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${
                               resolvedStatus === 'paid' 
                                 ? 'bg-emerald-500/10 text-emerald-500' 
@@ -1196,30 +1196,32 @@ export default function InvoicesPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto shrink-0 border-t border-border/40 sm:border-t-0 pt-2 sm:pt-0">
                         <span className="text-xs font-black text-[var(--foreground)]">
                           {formatCurrencyValue(inv.amount, user?.currency || 'EUR', language)}
                         </span>
                         
-                        <button
-                          onClick={() => toggleInvoiceStatus(inv)}
-                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                            resolvedStatus === 'paid'
-                              ? 'border-emerald-500/20 hover:bg-emerald-500/10 text-emerald-500'
-                              : 'border-border/60 hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground'
-                          }`}
-                          title={resolvedStatus === 'paid' ? (language === 'es' ? 'Marcar como pendiente' : 'Mark as pending') : (language === 'es' ? 'Marcar como pagada' : 'Mark as paid')}
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleInvoiceStatus(inv)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              resolvedStatus === 'paid'
+                                ? 'border-emerald-500/20 hover:bg-emerald-500/10 text-emerald-500'
+                                : 'border-border/60 hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground'
+                            }`}
+                            title={resolvedStatus === 'paid' ? (language === 'es' ? 'Marcar como pendiente' : 'Mark as pending') : (language === 'es' ? 'Marcar como pagada' : 'Mark as paid')}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
 
-                        <button
-                          onClick={() => deleteInvoice(inv.id)}
-                          className="p-1.5 rounded-lg border border-border/60 hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition-colors cursor-pointer"
-                          title={language === 'es' ? 'Eliminar factura' : 'Delete bill'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => deleteInvoice(inv.id)}
+                            className="p-1.5 rounded-lg border border-border/60 hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition-colors cursor-pointer"
+                            title={language === 'es' ? 'Eliminar factura' : 'Delete bill'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
