@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
@@ -32,7 +32,10 @@ const registerSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-export default function AuthPage() {
+function AuthForm() {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get('mode');
+  const accepted = searchParams.get('accepted');
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [detectedGeo, setDetectedGeo] = useState<{ country?: string; currency?: string }>({});
   
@@ -251,9 +254,20 @@ export default function AuthPage() {
     resolver: zodResolver(loginSchema)
   });
 
-  const { register: registerSignup, handleSubmit: handleSubmitSignup, formState: { errors: signupErrors, isSubmitting: isSubmittingSignup } } = useForm<RegisterFormValues>({
+  const { register: registerSignup, handleSubmit: handleSubmitSignup, setValue: setSignupValue, formState: { errors: signupErrors, isSubmitting: isSubmittingSignup } } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema)
   });
+
+  useEffect(() => {
+    if (mode === 'signup' || mode === 'register') {
+      setActiveTab('signup');
+      if (accepted === 'true') {
+        setSignupValue('acceptTerms', true);
+      }
+    } else if (mode === 'signin' || mode === 'login') {
+      setActiveTab('signin');
+    }
+  }, [mode, accepted, setSignupValue]);
 
   const onLogin = async (data: LoginFormValues) => {
     try {
@@ -658,7 +672,7 @@ export default function AuthPage() {
                         {language === 'es' ? (
                           <>
                             Acepto los{' '}
-                            <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                            <Link href="/terms?mode=signup" className="text-[var(--primary)] hover:underline font-bold">
                               Términos y Condiciones
                             </Link>{' '}
                             de la aplicación.
@@ -666,7 +680,7 @@ export default function AuthPage() {
                         ) : (
                           <>
                             I accept the{' '}
-                            <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                            <Link href="/terms?mode=signup" className="text-[var(--primary)] hover:underline font-bold">
                               Terms and Conditions
                             </Link>{' '}
                             of the application.
@@ -731,7 +745,7 @@ export default function AuthPage() {
               {language === 'es' ? (
                 <>
                   Al continuar, aceptas nuestros{' '}
-                  <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                  <Link href={`/terms?mode=${activeTab === 'signup' ? 'signup' : 'signin'}`} className="text-[var(--primary)] hover:underline font-bold">
                     Términos de Servicio
                   </Link>{' '}
                   y Política de Privacidad.
@@ -739,7 +753,7 @@ export default function AuthPage() {
               ) : (
                 <>
                   By continuing, you agree to our{' '}
-                  <Link href="/terms" className="text-[var(--primary)] hover:underline font-bold">
+                  <Link href={`/terms?mode=${activeTab === 'signup' ? 'signup' : 'signin'}`} className="text-[var(--primary)] hover:underline font-bold">
                     Terms of Service
                   </Link>{' '}
                   and Privacy Policy.
@@ -914,5 +928,18 @@ export default function AuthPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center gap-2 text-sm font-extrabold text-muted-foreground bg-[var(--background)]">
+        <div className="w-8 h-8 border-4 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
+        <span>Cargando...</span>
+      </div>
+    }>
+      <AuthForm />
+    </Suspense>
   );
 }

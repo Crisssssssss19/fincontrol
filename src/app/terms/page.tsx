@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Globe, Wallet, ShieldCheck, Scale, Info, Sparkles } from 'lucide-react';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useAuthStore } from '@/store/useAuthStore';
 
-export default function TermsPage() {
+function TermsContent() {
   const { language, setLanguage } = useLanguageStore();
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Set page title for SEO
   useEffect(() => {
@@ -21,11 +22,13 @@ export default function TermsPage() {
     setLanguage(language === 'es' ? 'en' : 'es');
   };
 
-  const handleBack = () => {
+  const handleBack = (accepted: boolean = false) => {
     if (isAuthenticated) {
       router.push('/dashboard');
     } else {
-      router.push('/auth/login');
+      const mode = searchParams.get('mode') || 'signin';
+      const acceptedParam = accepted ? '&accepted=true' : '';
+      router.push(`/auth/login?mode=${mode}${acceptedParam}`);
     }
   };
 
@@ -34,7 +37,7 @@ export default function TermsPage() {
       {/* 1. Header Area (for guests, or clean view) */}
       <div className="w-full max-w-4xl flex items-center justify-between mb-8 pb-4 border-b border-border/60">
         <button
-          onClick={handleBack}
+          onClick={() => handleBack(false)}
           className="flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-[var(--foreground)] transition-colors active:scale-95 cursor-pointer bg-card border border-border px-3.5 py-2 rounded-xl shadow-2xs"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -185,7 +188,7 @@ export default function TermsPage() {
           </p>
           <div className="pt-2 flex justify-center gap-4">
             <button
-              onClick={handleBack}
+              onClick={() => handleBack(true)}
               className="px-6 py-2.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-xl font-bold text-xs shadow-md hover:opacity-95 transition-all active:scale-98 cursor-pointer"
             >
               {language === 'es' ? 'Aceptar y Continuar' : 'Accept and Continue'}
@@ -200,5 +203,18 @@ export default function TermsPage() {
         &copy; {new Date().getFullYear()} FinControl. {language === 'es' ? 'Todos los derechos reservados.' : 'All rights reserved.'}
       </footer>
     </div>
+  );
+}
+
+export default function TermsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center gap-2 text-sm font-extrabold text-muted-foreground bg-[var(--background)]">
+        <div className="w-8 h-8 border-4 border-[var(--primary)] border-t-transparent rounded-full animate-spin"></div>
+        <span>Cargando...</span>
+      </div>
+    }>
+      <TermsContent />
+    </Suspense>
   );
 }

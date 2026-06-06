@@ -17,7 +17,8 @@ import {
   Filter,
   Download,
   X,
-  Tag
+  Tag,
+  Edit3
 } from 'lucide-react';
 import { Income } from '@/core/entities/Income';
 import { ExportService } from '@/utils/export';
@@ -44,6 +45,33 @@ type IncomeFormValues = z.infer<typeof incomeSchema>;
 export default function IncomesPage() {
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+
+  const startEditIncome = (income: Income) => {
+    setEditingIncome(income);
+    const { cleanDesc, tags } = parseDescriptionAndTags(income.description);
+    reset({
+      description: cleanDesc,
+      amount: income.amount,
+      category: income.category,
+      date: income.date,
+      paymentMethod: income.paymentMethod,
+    });
+    setSelectedTags(tags);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const cancelEditIncome = () => {
+    setEditingIncome(null);
+    reset({
+      description: '',
+      amount: undefined,
+      category: 'Nómina',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'Transferencia',
+    });
+    setSelectedTags([]);
+  };
   const isOnline = useSyncStore(state => state.isOnline);
   const { language } = useLanguageStore();
   const t = translations[language] || translations['es'];
@@ -154,8 +182,8 @@ export default function IncomesPage() {
     const tagsSuffix = selectedTags.map(t => `#${t}`).join(' ');
     const finalDescription = data.description + (tagsSuffix ? ` ${tagsSuffix}` : '');
 
-    const newIncome: Income = {
-      id,
+    const updatedIncome: Income = {
+      id: editingIncome ? editingIncome.id : id,
       userId: user?.id || 'a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6',
       description: finalDescription,
       amount: data.amount,
@@ -168,11 +196,16 @@ export default function IncomesPage() {
       // Offline-first IndexedDB storage
       try {
         const db = await initOfflineDB();
-        await db.put('pending_incomes', newIncome);
+        await db.put('pending_incomes', updatedIncome);
         // Instantly update UI locally
-        setIncomes(prev => [newIncome, ...prev]);
-        reset();
-        setSelectedTags([]);
+        if (editingIncome) {
+          setIncomes(prev => prev.map(i => i.id === editingIncome.id ? updatedIncome : i));
+          cancelEditIncome();
+        } else {
+          setIncomes(prev => [updatedIncome, ...prev]);
+          reset();
+          setSelectedTags([]);
+        }
         alert(t.noConnectionMsg);
       } catch (err) {
         console.error('Error saving pending income to IDB:', err);
@@ -183,17 +216,23 @@ export default function IncomesPage() {
         const res = await fetch('/api/incomes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newIncome),
+          body: JSON.stringify(updatedIncome),
         });
         const result = await res.json();
         if (result.success) {
-          setIncomes(prev => [result.income, ...prev]);
-          reset();
-          setSelectedTags([]);
-          alert(language === 'es' ? '¡Ingreso registrado con éxito!' : 'Income registered successfully!');
+          if (editingIncome) {
+            setIncomes(prev => prev.map(i => i.id === editingIncome.id ? result.income : i));
+            cancelEditIncome();
+            alert(language === 'es' ? '¡Ingreso actualizado con éxito!' : 'Income updated successfully!');
+          } else {
+            setIncomes(prev => [result.income, ...prev]);
+            reset();
+            setSelectedTags([]);
+            alert(language === 'es' ? '¡Ingreso registrado con éxito!' : 'Income registered successfully!');
+          }
         }
       } catch (err) {
-        console.error('Error creating income:', err);
+        console.error('Error saving income:', err);
       }
     }
   };
@@ -320,7 +359,11 @@ export default function IncomesPage() {
         {/* Registration Form */}
         <div className="xl:col-span-4 bg-card p-6 rounded-2xl shadow-sm border border-border">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-black text-[var(--foreground)]">{t.registrarIngreso}</h2>
+            <h2 className="text-lg font-black text-[var(--foreground)]">
+              {editingIncome 
+                ? (language === 'es' ? 'Editar Ingreso' : 'Edit Income') 
+                : t.registrarIngreso}
+            </h2>
             <div className="flex items-center gap-1">
               {isOnline ? (
                 <span className="text-[10px] bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
@@ -489,12 +532,25 @@ export default function IncomesPage() {
               )}
             </div>
 
-            <button 
-              type="submit"
-              className="w-full mt-4 bg-[var(--primary)] text-[var(--primary-foreground)] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-95 transition-all active:scale-[0.98]"
-            >
-              {t.guardarIngreso}
-            </button>
+            <div className="flex gap-2.5 mt-4">
+              {editingIncome && (
+                <button 
+                  type="button"
+                  onClick={cancelEditIncome}
+                  className="w-1/3 border border-border text-muted-foreground py-3 rounded-xl font-bold text-sm hover:bg-muted transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  {language === 'es' ? 'Cancelar' : 'Cancel'}
+                </button>
+              )}
+              <button 
+                type="submit"
+                className="flex-1 bg-[var(--primary)] text-[var(--primary-foreground)] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-95 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                {editingIncome 
+                  ? (language === 'es' ? 'Guardar Cambios' : 'Save Changes') 
+                  : t.guardarIngreso}
+              </button>
+            </div>
           </form>
         </div>
 
@@ -722,13 +778,21 @@ export default function IncomesPage() {
                         <td className="py-4 text-right font-black text-[var(--primary)] text-sm">
                           +{formatCurrencyValue(i.amount, user?.currency || 'EUR', language)}
                         </td>
-                        <td className="py-4 text-right w-10">
-                          <button 
-                            onClick={() => deleteIncome(i.id)}
-                            className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="py-4 text-right w-20">
+                          <div className="flex items-center justify-end gap-1">
+                            <button 
+                              onClick={() => startEditIncome(i)}
+                              className="p-1.5 text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => deleteIncome(i.id)}
+                              className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

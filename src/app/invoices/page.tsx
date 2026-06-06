@@ -26,7 +26,8 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  Edit3
 } from 'lucide-react';
 import { Invoice, InvoiceType, InvoiceStatus } from '@/core/entities/Invoice';
 import { ExportService } from '@/utils/export';
@@ -58,6 +59,38 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+
+  const startEditInvoice = (invoice: Invoice) => {
+    setEditingInvoice(invoice);
+    reset({
+      name: invoice.name,
+      type: invoice.type,
+      description: invoice.description || '',
+      amount: invoice.amount,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      paymentDate: invoice.paymentDate || '',
+      status: invoice.status,
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const cancelEditInvoice = () => {
+    setEditingInvoice(null);
+    reset({
+      status: 'pending',
+      type: 'Otros',
+      issueDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date().toISOString().split('T')[0],
+      paymentDate: '',
+      name: '',
+      description: '',
+      amount: undefined,
+    });
+    setShowForm(false);
+  };
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -111,8 +144,8 @@ export default function InvoicesPage() {
       ? (data.paymentDate || new Date().toISOString().split('T')[0]) 
       : null;
 
-    const newInvoice: Invoice = {
-      id,
+    const updatedInvoice: Invoice = {
+      id: editingInvoice ? editingInvoice.id : id,
       userId: user?.id || 'a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6',
       name: data.name,
       type: data.type,
@@ -122,7 +155,7 @@ export default function InvoicesPage() {
       dueDate: resolvedDueDate,
       paymentDate: resolvedPaymentDate,
       status: data.status,
-      attachmentUrl: '/placeholder-bill.pdf',
+      attachmentUrl: editingInvoice ? editingInvoice.attachmentUrl : '/placeholder-bill.pdf',
     };
 
     const isOverdue = data.status === 'overdue' || 
@@ -131,10 +164,15 @@ export default function InvoicesPage() {
     if (!isOnline) {
       try {
         const db = await initOfflineDB();
-        await db.put('pending_invoices', newInvoice);
-        setInvoices(prev => [newInvoice, ...prev]);
-        reset();
-        setShowForm(false);
+        await db.put('pending_invoices', updatedInvoice);
+        if (editingInvoice) {
+          setInvoices(prev => prev.map(inv => inv.id === editingInvoice.id ? updatedInvoice : inv));
+          cancelEditInvoice();
+        } else {
+          setInvoices(prev => [updatedInvoice, ...prev]);
+          reset();
+          setShowForm(false);
+        }
         if (isOverdue) {
           alert(language === 'es' ? '⚠️ ¡Atención! Esta factura se encuentra vencida.' : '⚠️ Attention! This bill is overdue.');
         } else {
@@ -148,21 +186,27 @@ export default function InvoicesPage() {
         const res = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newInvoice),
+          body: JSON.stringify(updatedInvoice),
         });
         const result = await res.json();
         if (result.success) {
-          setInvoices(prev => [result.invoice, ...prev]);
-          reset();
-          setShowForm(false);
-          if (isOverdue) {
-            alert(language === 'es' ? '⚠️ ¡Atención! Esta factura se encuentra vencida y requiere pago inmediato.' : '⚠️ Attention! This bill is overdue and requires immediate payment.');
+          if (editingInvoice) {
+            setInvoices(prev => prev.map(inv => inv.id === editingInvoice.id ? result.invoice : inv));
+            cancelEditInvoice();
+            alert(language === 'es' ? '¡Factura actualizada con éxito!' : 'Invoice updated successfully!');
           } else {
-            alert(language === 'es' ? '¡Factura registrada con éxito!' : 'Invoice registered successfully!');
+            setInvoices(prev => [result.invoice, ...prev]);
+            reset();
+            setShowForm(false);
+            if (isOverdue) {
+              alert(language === 'es' ? '⚠️ ¡Atención! Esta factura se encuentra vencida y requiere pago inmediato.' : '⚠️ Attention! This bill is overdue and requires immediate payment.');
+            } else {
+              alert(language === 'es' ? '¡Factura registrada con éxito!' : 'Invoice registered successfully!');
+            }
           }
         }
       } catch (err) {
-        console.error('Error creating invoice:', err);
+        console.error('Error saving invoice:', err);
       }
     }
   };
@@ -513,9 +557,13 @@ export default function InvoicesPage() {
       {showForm && (
         <section className="bg-card border border-border rounded-2xl p-6 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-sm font-black text-[var(--foreground)]">{t.registrarPago}</h2>
+            <h2 className="text-sm font-black text-[var(--foreground)]">
+              {editingInvoice 
+                ? (language === 'es' ? 'Editar Factura' : 'Edit Invoice') 
+                : t.registrarPago}
+            </h2>
             <button 
-              onClick={() => setShowForm(false)}
+              onClick={cancelEditInvoice}
               className="text-muted-foreground hover:bg-muted p-1.5 rounded-full transition-colors cursor-pointer"
             >
               <XIcon className="w-5 h-5" />
@@ -635,17 +683,19 @@ export default function InvoicesPage() {
 
             <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-border/40">
               <button 
-                onClick={() => setShowForm(false)}
+                onClick={cancelEditInvoice}
                 className="px-6 py-2.5 border border-border text-muted-foreground rounded-xl font-bold text-xs hover:bg-muted transition-colors cursor-pointer" 
                 type="button"
               >
-                {t.cancelar}
+                {language === 'es' ? 'Cancelar' : 'Cancel'}
               </button>
               <button 
                 className="px-8 py-2.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-xl font-bold text-xs shadow-md hover:opacity-95 transition-all cursor-pointer" 
                 type="submit"
               >
-                {t.guardarFactura}
+                {editingInvoice 
+                  ? (language === 'es' ? 'Guardar Cambios' : 'Save Changes') 
+                  : t.guardarFactura}
               </button>
             </div>
           </form>
@@ -798,12 +848,20 @@ export default function InvoicesPage() {
                         </p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => deleteInvoice(inv.id)}
-                      className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 shrink-0 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button 
+                        onClick={() => startEditInvoice(inv)}
+                        className="p-1.5 text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-all active:scale-90 shrink-0 cursor-pointer"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => deleteInvoice(inv.id)}
+                        className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 shrink-0 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Middle Row: Dates */}
@@ -980,12 +1038,20 @@ export default function InvoicesPage() {
                           </button>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => deleteInvoice(inv.id)}
-                            className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button 
+                              onClick={() => startEditInvoice(inv)}
+                              className="p-1.5 text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => deleteInvoice(inv.id)}
+                              className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1212,6 +1278,17 @@ export default function InvoicesPage() {
                             title={resolvedStatus === 'paid' ? (language === 'es' ? 'Marcar como pendiente' : 'Mark as pending') : (language === 'es' ? 'Marcar como pagada' : 'Mark as paid')}
                           >
                             <CheckCircle className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              startEditInvoice(inv);
+                              setSelectedDayInvoices(null);
+                            }}
+                            className="p-1.5 rounded-lg border border-border/60 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] text-muted-foreground transition-colors cursor-pointer"
+                            title={language === 'es' ? 'Editar factura' : 'Edit bill'}
+                          >
+                            <Edit3 className="w-4 h-4" />
                           </button>
 
                           <button

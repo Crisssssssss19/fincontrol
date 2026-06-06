@@ -53,6 +53,33 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'expenses' | 'budgets'>('expenses');
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  const startEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    const { cleanDesc, tags } = parseDescriptionAndTags(expense.description);
+    reset({
+      description: cleanDesc,
+      amount: expense.amount,
+      category: expense.category,
+      date: expense.date,
+      paymentMethod: expense.paymentMethod,
+    });
+    setSelectedTags(tags);
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const cancelEditExpense = () => {
+    setEditingExpense(null);
+    reset({
+      description: '',
+      amount: undefined,
+      category: 'Alimentación',
+      date: new Date().toISOString().split('T')[0],
+      paymentMethod: 'Tarjeta',
+    });
+    setSelectedTags([]);
+  };
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [editableBudgets, setEditableBudgets] = useState<Record<string, number>>({});
   const [savingBudgets, setSavingBudgets] = useState(false);
@@ -229,8 +256,8 @@ export default function ExpensesPage() {
     const tagsSuffix = selectedTags.map(t => `#${t}`).join(' ');
     const finalDescription = data.description + (tagsSuffix ? ` ${tagsSuffix}` : '');
 
-    const newExpense: Expense = {
-      id,
+    const updatedExpense: Expense = {
+      id: editingExpense ? editingExpense.id : id,
       userId: user?.id || 'a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6',
       description: finalDescription,
       amount: data.amount,
@@ -243,11 +270,16 @@ export default function ExpensesPage() {
       // Offline-first IndexedDB storage
       try {
         const db = await initOfflineDB();
-        await db.put('pending_expenses', newExpense);
+        await db.put('pending_expenses', updatedExpense);
         // Instantly update UI locally
-        setExpenses(prev => [newExpense, ...prev]);
-        reset();
-        setSelectedTags([]);
+        if (editingExpense) {
+          setExpenses(prev => prev.map(e => e.id === editingExpense.id ? updatedExpense : e));
+          cancelEditExpense();
+        } else {
+          setExpenses(prev => [updatedExpense, ...prev]);
+          reset();
+          setSelectedTags([]);
+        }
         alert(t.noConnectionMsg);
       } catch (err) {
         console.error('Error saving pending expense to IDB:', err);
@@ -258,17 +290,23 @@ export default function ExpensesPage() {
         const res = await fetch('/api/expenses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newExpense),
+          body: JSON.stringify(updatedExpense),
         });
         const result = await res.json();
         if (result.success) {
-          setExpenses(prev => [result.expense, ...prev]);
-          reset();
-          setSelectedTags([]);
-          alert(language === 'es' ? '¡Gasto registrado con éxito!' : 'Expense registered successfully!');
+          if (editingExpense) {
+            setExpenses(prev => prev.map(e => e.id === editingExpense.id ? result.expense : e));
+            cancelEditExpense();
+            alert(language === 'es' ? '¡Gasto actualizado con éxito!' : 'Expense updated successfully!');
+          } else {
+            setExpenses(prev => [result.expense, ...prev]);
+            reset();
+            setSelectedTags([]);
+            alert(language === 'es' ? '¡Gasto registrado con éxito!' : 'Expense registered successfully!');
+          }
         }
       } catch (err) {
-        console.error('Error creating expense:', err);
+        console.error('Error saving expense:', err);
       }
     }
   };
@@ -424,7 +462,11 @@ export default function ExpensesPage() {
             {/* Registration Form */}
             <div className="xl:col-span-4 bg-card p-6 rounded-2xl shadow-sm border border-border">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-black text-[var(--foreground)]">{t.registrarGasto}</h2>
+                <h2 className="text-lg font-black text-[var(--foreground)]">
+                  {editingExpense 
+                    ? (language === 'es' ? 'Editar Gasto' : 'Edit Expense') 
+                    : t.registrarGasto}
+                </h2>
                 <div className="flex items-center gap-1">
                   {isOnline ? (
                     <span className="text-[10px] bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
@@ -595,12 +637,25 @@ export default function ExpensesPage() {
                   )}
                 </div>
 
-                <button 
-                  type="submit"
-                  className="w-full mt-4 bg-[var(--primary)] text-[var(--primary-foreground)] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-95 transition-all active:scale-[0.98]"
-                >
-                  {t.guardarGasto}
-                </button>
+                <div className="flex gap-2.5 mt-4">
+                  {editingExpense && (
+                    <button 
+                      type="button"
+                      onClick={cancelEditExpense}
+                      className="w-1/3 border border-border text-muted-foreground py-3 rounded-xl font-bold text-sm hover:bg-muted transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      {language === 'es' ? 'Cancelar' : 'Cancel'}
+                    </button>
+                  )}
+                  <button 
+                    type="submit"
+                    className="flex-1 bg-[var(--primary)] text-[var(--primary-foreground)] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-95 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    {editingExpense 
+                      ? (language === 'es' ? 'Guardar Cambios' : 'Save Changes') 
+                      : t.guardarGasto}
+                  </button>
+                </div>
               </form>
             </div>
 
@@ -831,13 +886,21 @@ export default function ExpensesPage() {
                             <td className="py-4 text-right font-black text-error text-sm">
                               -{formatCurrencyValue(e.amount, user?.currency || 'EUR', language)}
                             </td>
-                            <td className="py-4 text-right w-10">
-                              <button 
-                                onClick={() => deleteExpense(e.id)}
-                                className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            <td className="py-4 text-right w-20">
+                              <div className="flex items-center justify-end gap-1">
+                                <button 
+                                  onClick={() => startEditExpense(e)}
+                                  className="p-1.5 text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => deleteExpense(e.id)}
+                                  className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded-lg transition-all active:scale-90 cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

@@ -29,11 +29,31 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const usecase = new CreateIncome(incomeRepository);
-    const income = await usecase.execute({
-      ...body,
-      userId: user.userId,
-    });
+    let income;
+
+    if (body.id) {
+      const existing = await incomeRepository.findById(body.id);
+      if (existing) {
+        if (existing.userId !== user.userId) {
+          return NextResponse.json({ success: false, error: 'Unauthorized income modification' }, { status: 403 });
+        }
+        income = await incomeRepository.update(body.id, {
+          description: body.description,
+          amount: Number(body.amount),
+          category: body.category,
+          date: body.date,
+          paymentMethod: body.paymentMethod,
+        });
+      }
+    }
+
+    if (!income) {
+      const usecase = new CreateIncome(incomeRepository);
+      income = await usecase.execute({
+        ...body,
+        userId: user.userId,
+      });
+    }
 
     return NextResponse.json({ success: true, income });
   } catch (err: any) {

@@ -30,11 +30,31 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const usecase = new CreateExpense(expenseRepository);
-    const expense = await usecase.execute({
-      ...body,
-      userId: user.userId,
-    });
+    let expense;
+
+    if (body.id) {
+      const existing = await expenseRepository.findById(body.id);
+      if (existing) {
+        if (existing.userId !== user.userId) {
+          return NextResponse.json({ success: false, error: 'Unauthorized expense modification' }, { status: 403 });
+        }
+        expense = await expenseRepository.update(body.id, {
+          description: body.description,
+          amount: Number(body.amount),
+          category: body.category,
+          date: body.date,
+          paymentMethod: body.paymentMethod,
+        });
+      }
+    }
+
+    if (!expense) {
+      const usecase = new CreateExpense(expenseRepository);
+      expense = await usecase.execute({
+        ...body,
+        userId: user.userId,
+      });
+    }
 
     const budgetAlert = await checkBudgetThresholds(user.userId);
 
