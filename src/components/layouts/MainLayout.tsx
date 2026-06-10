@@ -214,22 +214,61 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [bellOpen, setBellOpen] = useState(false);
   const bellContainerRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<any[]>([]);
+  const [permissionStatus, setPermissionStatus] = useState<string>('default');
+  const [hasNotificationSupport, setHasNotificationSupport] = useState<boolean>(false);
 
   // Sync ref to avoid stale closures in polling
   useEffect(() => {
     notificationsRef.current = notifications;
   }, [notifications]);
 
-  // Request browser permission for native notifications
+  // Check browser notification capabilities
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setHasNotificationSupport(true);
+      setPermissionStatus(Notification.permission);
+    }
+  }, []);
+
+  // Request browser permission for native notifications automatically (on desktop/Android)
   useEffect(() => {
     if (user && typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'default') {
         Notification.requestPermission().then((permission) => {
-          console.log('[Notification API] Permission status:', permission);
-        });
+          setPermissionStatus(permission);
+        }).catch(() => {});
       }
     }
   }, [user]);
+
+  // Interactive notification prompt for Safari / iOS
+  const requestNativePermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const permission = await Notification.requestPermission();
+        setPermissionStatus(permission);
+        if (permission === 'granted') {
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then(reg => {
+              reg.showNotification('FinControl', {
+                body: language === 'es' ? '¡Notificaciones nativas activadas con éxito!' : 'Native notifications enabled successfully!',
+                icon: '/logo.png',
+                badge: '/icons/icon-192x192.png',
+                data: { url: '/dashboard' }
+              });
+            });
+          } else {
+            new Notification('FinControl', {
+              body: language === 'es' ? '¡Notificaciones nativas activadas con éxito!' : 'Native notifications enabled successfully!',
+              icon: '/logo.png',
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error requesting notification permission:', err);
+      }
+    }
+  };
 
   // Load and poll notifications
   useEffect(() => {
@@ -252,11 +291,27 @@ export default function MainLayout({ children }: MainLayoutProps) {
             parsed.forEach((n: any) => {
               if (!n.read && !existingIds.has(n.id)) {
                 try {
-                  new Notification(n.title, {
-                    body: n.message,
-                    icon: '/logo.png',
-                    badge: '/icons/icon-192x192.png',
-                  });
+                  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+                    navigator.serviceWorker.ready.then(reg => {
+                      reg.showNotification(n.title, {
+                        body: n.message,
+                        icon: '/logo.png',
+                        badge: '/icons/icon-192x192.png',
+                        tag: n.id,
+                        data: { url: '/dashboard' }
+                      });
+                    });
+                  } else {
+                    const localNotification = new Notification(n.title, {
+                      body: n.message,
+                      icon: '/logo.png',
+                      badge: '/icons/icon-192x192.png',
+                    });
+                    localNotification.onclick = () => {
+                      window.focus();
+                      router.push('/dashboard');
+                    };
+                  }
                 } catch (e) {
                   console.error('Failed to trigger native notification:', e);
                 }
@@ -275,7 +330,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     const interval = setInterval(loadNotifications, 30000); // 30s poll
 
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, router, language]);
 
   // Click outside to close bell dropdown
   useEffect(() => {
@@ -548,6 +603,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       </button>
                     )}
                   </div>
+
+                  {/* Safari / iOS Interactive native notification activator */}
+                  {hasNotificationSupport && permissionStatus === 'default' && (
+                    <div className="px-4 pb-3">
+                      <button 
+                        onClick={requestNativePermission}
+                        className="w-full text-center py-2 bg-[var(--primary)]/10 text-[var(--primary)] rounded-xl text-xs font-bold hover:bg-[var(--primary)]/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                      >
+                        <Bell className="w-3.5 h-3.5 text-[var(--primary)]" />
+                        {language === 'es' ? 'Permitir notificaciones en el teléfono' : 'Enable phone notifications'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Dropdown Body */}
                   <div className="max-h-[350px] overflow-y-auto divide-y divide-border/30">

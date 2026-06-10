@@ -155,7 +155,12 @@ export async function checkCategoryBudgetThresholds(
   const user = await userRepository.findById(userId);
   if (!user || !user.categoryBudgets) return null;
 
-  const limit = user.categoryBudgets[category];
+  // Find key in categoryBudgets case-insensitively
+  const budgetKey = Object.keys(user.categoryBudgets).find(
+    k => k.toLowerCase() === category.toLowerCase()
+  );
+  if (!budgetKey) return null;
+  const limit = user.categoryBudgets[budgetKey];
   // If no budget is set for this category, or it's 0, skip checking
   if (!limit || Number(limit) <= 0) return null;
 
