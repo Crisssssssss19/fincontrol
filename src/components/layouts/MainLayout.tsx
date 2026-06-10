@@ -213,6 +213,23 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
   const bellContainerRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<any[]>([]);
+
+  // Sync ref to avoid stale closures in polling
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  // Request browser permission for native notifications
+  useEffect(() => {
+    if (user && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          console.log('[Notification API] Permission status:', permission);
+        });
+      }
+    }
+  }, [user]);
 
   // Load and poll notifications
   useEffect(() => {
@@ -227,6 +244,26 @@ export default function MainLayout({ children }: MainLayoutProps) {
             ...n,
             createdAt: new Date(n.createdAt)
           }));
+          
+          // Trigger native mobile/browser notifications for new incoming unread alerts
+          const currentNotifications = notificationsRef.current;
+          if (currentNotifications.length > 0 && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            const existingIds = new Set(currentNotifications.map(n => n.id));
+            parsed.forEach((n: any) => {
+              if (!n.read && !existingIds.has(n.id)) {
+                try {
+                  new Notification(n.title, {
+                    body: n.message,
+                    icon: '/logo.png',
+                    badge: '/icons/icon-192x192.png',
+                  });
+                } catch (e) {
+                  console.error('Failed to trigger native notification:', e);
+                }
+              }
+            });
+          }
+
           setNotifications(parsed);
         }
       } catch (err) {

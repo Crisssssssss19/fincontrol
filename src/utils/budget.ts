@@ -147,3 +147,87 @@ export async function checkBudgetThresholds(userId: string): Promise<{ crossedTh
   
   return { crossedThreshold: thresholdToAlert, percent };
 }
+
+export async function checkCategoryBudgetThresholds(
+  userId: string,
+  category: string
+): Promise<{ crossedLimit: boolean; percent: number } | null> {
+  const user = await userRepository.findById(userId);
+  if (!user || !user.categoryBudgets) return null;
+
+  const limit = user.categoryBudgets[category];
+  // If no budget is set for this category, or it's 0, skip checking
+  if (!limit || Number(limit) <= 0) return null;
+
+  const categoryLimit = Number(limit);
+  const resetDay = user.budgetResetDay || 1;
+  const { start, end } = getBudgetPeriodRange(resetDay);
+
+  const expenses = await expenseRepository.findByUserId(userId);
+  const periodExpenses = expenses.filter(e => {
+    const d = new Date(e.date);
+    return e.category.toLowerCase() === category.toLowerCase() && d >= start && d <= end;
+  });
+
+  const spent = periodExpenses.reduce((acc, curr) => acc + curr.amount, 0);
+  const percent = (spent / categoryLimit) * 100;
+
+  // We only notify when spent reaches or exceeds 100%
+  if (percent < 100) {
+    return { crossedLimit: false, percent };
+  }
+
+  // Check if we already notified for this category budget threshold in the current period
+  const notifications = await notificationRepository.findByUserId(userId);
+  const cycleNotifications = notifications.filter(n => n.createdAt >= start && n.createdAt <= end);
+
+  const hasAlerted = cycleNotifications.some(n => {
+    return n.title.includes(`Presupuesto de ${category} Agotado`) || 
+           (n.title.includes('Límite') && n.message.includes(`"${category}"`));
+  });
+
+  if (hasAlerted) {
+    return { crossedLimit: true, percent };
+  }
+
+  const title = `⚠️ Presupuesto de ${category} Agotado`;
+  const message = `Has alcanzado o superado el límite de tu presupuesto para la categoría "${category}". Límite: ${categoryLimit.toLocaleString()} ${user.currency || 'EUR'}, Gastado: ${spent.toLocaleString()} ${user.currency || 'EUR'} (${percent.toFixed(1)}%).`;
+
+  const isExpenseAlertsEnabled = user.visualSettings?.expenseAlerts !== false;
+
+  if (isExpenseAlertsEnabled) {
+    // 1. Create DB Notification
+    await notificationRepository.create({
+      userId,
+      title,
+      message,
+      type: 'warning',
+      read: false,
+    });
+
+    // 2. Dispatch Email
+    const recommendations = [
+      `Reduce tus gastos en la categoría "${category}" de forma inmediata.`,
+      `Reasigna presupuesto de otras categorías menos críticas si es necesario.`,
+      `Lleva un registro estricto de cualquier desembolso adicional en esta categoría.`
+    ];
+
+    const emailHtml = EmailTemplates.getBudgetTemplate(
+      user.fullName,
+      100,
+      categoryLimit,
+      spent,
+      percent,
+      user.currency || 'EUR',
+      recommendations
+    );
+
+    try {
+      await ResendEmailService.sendMail(user.email, title, emailHtml);
+    } catch (emailErr) {
+      console.error(`Failed to send category budget threshold email for ${category}:`, emailErr);
+    }
+  }
+
+  return { crossedLimit: true, percent };
+}

@@ -356,4 +356,137 @@ export class EmailTemplates {
       </html>
     `;
   }
+
+  static getWeeklySummaryTemplate(
+    fullName: string,
+    startDateStr: string,
+    endDateStr: string,
+    totalIncome: number,
+    totalExpenses: number,
+    balance: number,
+    topCategory: string,
+    topCategoryAmount: number,
+    currency: string
+  ): string {
+    const isPositive = balance >= 0;
+    const balanceColor = isPositive ? '#10b981' : '#ef4444';
+    const bgLight = isPositive ? '#f0fdf4' : '#fef2f2';
+    const border = isPositive ? '#a7f3d0' : '#fee2e2';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        ${this.getBaseHead('Resumen Semanal - FinControl')}
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Outfit', 'Segoe UI', sans-serif;">
+          <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 40px 0;">
+            <tr>
+              <td align="center">
+                <table class="container" border="0" cellpadding="0" cellspacing="0" width="550" style="margin: 0 auto;">
+                  
+                  <!-- Logo / Header -->
+                  <tr>
+                    <td align="center" style="padding-bottom: 24px;">
+                      <table border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="background-color: #6366f1; border-radius: 12px; padding: 8px;">
+                            <span style="color: #ffffff; font-size: 24px; font-weight: 900; line-height: 1; display: block; font-family: 'Outfit', sans-serif;">FC</span>
+                          </td>
+                          <td style="padding-left: 10px;">
+                            <span style="font-size: 22px; font-weight: 800; color: #0f172a; tracking-tight: -0.5px; font-family: 'Outfit', sans-serif;">FinControl</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Card -->
+                  <tr>
+                    <td class="card" style="background-color: #ffffff; border-radius: 20px; padding: 40px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.03), 0 8px 10px -6px rgba(0, 0, 0, 0.03);">
+                      
+                      <!-- Title -->
+                      <h2 style="margin: 0 0 4px 0; color: #0f172a; font-size: 22px; font-weight: 800; font-family: 'Outfit', sans-serif;">📊 Tu Resumen Semanal</h2>
+                      <p style="margin: 0 0 24px 0; color: #64748b; font-size: 13px; font-family: 'Outfit', sans-serif;">
+                        Periodo: <strong>${startDateStr}</strong> al <strong>${endDateStr}</strong>
+                      </p>
+
+                      <p style="margin: 0 0 20px 0; color: #475569; font-size: 15px; line-height: 1.6; font-family: 'Outfit', sans-serif;">
+                        Hola, <strong>${fullName}</strong>. Aquí tienes el balance de tus movimientos financieros de la última semana.
+                      </p>
+
+                      <!-- Balance Panel -->
+                      <div style="background: linear-gradient(135deg, ${bgLight} 0%, #ffffff 100%); border: 1px solid ${border}; padding: 24px; border-radius: 16px; margin-bottom: 24px; text-align: center;">
+                        <span style="color: #64748b; font-size: 12px; text-transform: uppercase; tracking-spacing: 1px; font-weight: 600; display: block; margin-bottom: 6px;">Balance de la Semana</span>
+                        <span style="font-size: 32px; font-weight: 900; color: ${balanceColor}; font-family: 'Outfit', sans-serif; display: block;">
+                          ${isPositive ? '+' : ''}${balance.toLocaleString()} ${currency}
+                        </span>
+                      </div>
+
+                      <!-- Income vs Expense Grid -->
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px;">
+                        <tr>
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; text-align: center;">
+                            <span style="color: #10b981; font-size: 16px; font-weight: bold; display: block; margin-bottom: 4px;">📈 Ingresos</span>
+                            <span style="font-size: 14px; font-weight: 800; color: #0f172a;">${totalIncome.toLocaleString()} ${currency}</span>
+                          </td>
+                          <td width="4%"></td>
+                          <td width="48%" style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; text-align: center;">
+                            <span style="color: #ef4444; font-size: 16px; font-weight: bold; display: block; margin-bottom: 4px;">📉 Gastos</span>
+                            <span style="font-size: 14px; font-weight: 800; color: #0f172a;">${totalExpenses.toLocaleString()} ${currency}</span>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Category Breakdown -->
+                      ${topCategory ? `
+                        <h3 style="margin: 0 0 12px 0; color: #0f172a; font-size: 15px; font-weight: 700; font-family: 'Outfit', sans-serif;">🔍 Categoría de mayor gasto</h3>
+                        <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #f1f5f9; margin-bottom: 24px;">
+                          <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                              <td style="color: #475569; font-size: 14px; font-weight: 500; font-family: 'Outfit', sans-serif;">
+                                📁 ${topCategory}
+                              </td>
+                              <td align="right" style="font-weight: 800; color: #0f172a; font-size: 14px; font-family: 'Outfit', sans-serif;">
+                                ${topCategoryAmount.toLocaleString()} ${currency}
+                              </td>
+                            </tr>
+                          </table>
+                        </div>
+                      ` : ''}
+
+                      <!-- Recommendations / Tips -->
+                      <h3 style="margin: 0 0 12px 0; color: #0f172a; font-size: 15px; font-weight: 700; font-family: 'Outfit', sans-serif;">💡 Consejo Financiero Semanal</h3>
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px;">
+                        <tr>
+                          <td valign="top" style="padding-right: 8px; font-size: 14px; color: #6366f1;">✨</td>
+                          <td style="color: #475569; font-size: 13px; line-height: 1.5; font-family: 'Outfit', sans-serif;">
+                            ${isPositive 
+                              ? '¡Buen trabajo! Has mantenido un saldo positivo esta semana. Considera enviar una parte de este remanente directamente a tus objetivos de ahorro para hacer crecer tu patrimonio.'
+                              : 'Tus gastos superaron tus ingresos esta semana. Te recomendamos revisar tus gastos hormiga y categorizar detalladamente tus compras para identificar dónde puedes recortar.'
+                            }
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Notice -->
+                      <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #f1f5f9; margin-bottom: 24px;">
+                        <p style="margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; font-family: 'Outfit', sans-serif;">
+                          Recibes este correo porque tienes activado el "Resumen Semanal" en la configuración de notificaciones de FinControl. Puedes desactivarlo en cualquier momento desde tu perfil.
+                        </p>
+                      </div>
+
+                      <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+                      <p style="margin: 0; color: #94a3b8; font-size: 11px; text-align: center; font-family: 'Outfit', sans-serif;">
+                        FinControl PWA — Gestión Financiera Inteligente
+                      </p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
+  }
 }

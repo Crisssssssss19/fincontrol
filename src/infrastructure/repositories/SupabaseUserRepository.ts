@@ -156,5 +156,18 @@ export class SupabaseUserRepository implements IUserRepository {
 
     return this.mapToUser(data);
   }
+
+  async findAll(): Promise<User[]> {
+    if (!hasSupabaseKeys) {
+      return mockUsers;
+    }
+    try {
+      const { data, error } = await supabase.from('users').select('*');
+      if (error || !data) return [];
+      return data.map(this.mapToUser);
+    } catch {
+      return [];
+    }
+  }
 }
 export const userRepository = new SupabaseUserRepository();

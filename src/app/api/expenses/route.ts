@@ -4,7 +4,7 @@ import { GetUserExpenses } from '@/core/usecases/expenses/GetUserExpenses';
 import { CreateExpense } from '@/core/usecases/expenses/CreateExpense';
 import { DeleteExpense } from '@/core/usecases/expenses/DeleteExpense';
 import { getCurrentUser } from '@/infrastructure/security/AuthHelper';
-import { checkBudgetThresholds } from '@/utils/budget';
+import { checkBudgetThresholds, checkCategoryBudgetThresholds } from '@/utils/budget';
 
 export async function GET(req: Request) {
   try {
@@ -57,8 +57,9 @@ export async function POST(req: Request) {
     }
 
     const budgetAlert = await checkBudgetThresholds(user.userId);
+    const categoryBudgetAlert = await checkCategoryBudgetThresholds(user.userId, body.category);
 
-    return NextResponse.json({ success: true, expense, budgetAlert });
+    return NextResponse.json({ success: true, expense, budgetAlert, categoryBudgetAlert });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 400 });
   }
