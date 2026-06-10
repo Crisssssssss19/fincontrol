@@ -49,6 +49,21 @@ export default function ThemeInitializer() {
     root.style.setProperty('--font-sans', font);
     root.style.fontFamily = `"${font}", var(--font-sans), sans-serif`;
 
+    // 4. Dynamic theme-color meta tag update to sync status bar with theme background
+    requestAnimationFrame(() => {
+      const computedStyle = getComputedStyle(root);
+      const bgColor = computedStyle.getPropertyValue('--background').trim();
+      if (bgColor) {
+        let themeMeta = document.querySelector('meta[name="theme-color"]');
+        if (!themeMeta) {
+          themeMeta = document.createElement('meta');
+          themeMeta.setAttribute('name', 'theme-color');
+          document.head.appendChild(themeMeta);
+        }
+        themeMeta.setAttribute('content', bgColor);
+      }
+    });
+
   }, [theme, accentColor, font, borderRadius, density, animations, animationSpeed, mounted]);
 
   return null;
